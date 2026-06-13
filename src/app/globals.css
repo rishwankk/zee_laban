@@ -1,26 +1,113 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --primary: #00A1E4;
+  --primary-light: #E5F6FC;
+  --primary-dark: #007BAF;
+  --accent: #38BDF8;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --danger: #EF4444;
+  --white: #FFFFFF;
+  --gray-50: #F8FAFC;
+  --gray-100: #F1F5F9;
+  --text-primary: #0F172A;
+  --text-muted: #64748B;
+  
+  --background: var(--gray-50);
+  --foreground: var(--text-primary);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@theme {
+  --color-primary: #00A1E4;
+  --color-primary-light: #E5F6FC;
+  --color-primary-dark: #0081B6;
+  --color-accent: #38BDF8;
+  
+  /* OVERRIDE TAILWIND SKY TO MATCH #00A1E4 BRAND */
+  --color-sky-50: #E5F6FC;
+  --color-sky-100: #BFE7F6;
+  --color-sky-200: #80D2ED;
+  --color-sky-300: #40BCE3;
+  --color-sky-400: #00B1FA;
+  --color-sky-500: #00A1E4;
+  --color-sky-600: #0081B6;
+  --color-sky-700: #006089;
+  --color-sky-800: #00405B;
+  --color-sky-900: #00202E;
+  --color-sky-950: #001017;
+  --color-success: #22C55E;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+  --color-gray-50: #F8FAFC;
+  --color-gray-100: #F1F5F9;
+  --color-text-primary: #0F172A;
+  --color-text-muted: #64748B;
+  
+  --font-sans: var(--font-dmsans), system-ui, sans-serif;
+  --font-display: var(--font-nunito), system-ui, sans-serif;
+  --font-mono: var(--font-mono), monospace;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  /* Premium Micro-Animations for Responsive Web App */
+  --animate-fade-in: fade-in 0.25s ease-out;
+  --animate-slide-up: slide-up 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.15);
+  --animate-slide-down: slide-down 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-scale-in: scale-in 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  @keyframes slide-up {
+    from { transform: translateY(16px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes slide-down {
+    from { transform: translateY(-16px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes scale-in {
+    from { transform: scale(0.95); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
   }
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-display);
+  font-weight: 700;
+}
+
+/* Premium Ultra-Slim Scrollbars */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #E2E8F0; /* slate-200 */
+  border-radius: 999px;
+  transition: background-color 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #00A1E4; /* ZEE LABAN #00A1E4 theme accent! */
+}
+
+/* Hide scrollbar utility */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
 }
