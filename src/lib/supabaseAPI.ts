@@ -296,22 +296,6 @@ export const supabaseAPI = {
     if (error) throw new Error(error.message);
   },
 
-  getStaffPassword: async (storeId: string): Promise<string> => {
-    const { data, error } = await supabase!
-      .from('system_settings')
-      .select('value')
-      .eq('key', `staff_password_${storeId}`)
-      .maybeSingle();
-    if (error || !data) return 'admin123'; // Default password
-    return data.value;
-  },
-
-  setStaffPassword: async (storeId: string, newPassword: string): Promise<void> => {
-    const { error } = await supabase!
-      .from('system_settings')
-      .upsert({ key: `staff_password_${storeId}`, value: newPassword });
-    if (error) throw new Error(error.message);
-  },
 
   getAdvancesByStore: async (storeId: string): Promise<(StaffAdvance & { staff: Staff })[]> => {
     const { data, error } = await supabase!
