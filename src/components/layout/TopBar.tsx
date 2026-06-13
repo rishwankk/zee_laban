@@ -24,7 +24,7 @@ export default function TopBar() {
 
   return (
     <header className="flex h-20 w-full items-center justify-between bg-white px-4 sm:px-8 shadow-sm border-b border-gray-100 select-none print:hidden">
-      
+
       {/* Mobile Hamburger toggle */}
       <button
         onClick={() => toggleMobileSidebar(true)}
@@ -57,7 +57,7 @@ export default function TopBar() {
             </div>
             <div>
               <h1 className="font-display font-extrabold text-base text-text-primary leading-tight">
-                Laban Dessert Brand
+                Zee Laban
               </h1>
               <p className="text-[10px] font-bold text-text-muted mt-0.5">
                 Consolidated Main HQ Panel
@@ -69,7 +69,7 @@ export default function TopBar() {
 
       {/* Date, Time, and Session */}
       <div className="flex items-center space-x-6">
-        
+
         {/* Monospace Clock & Calendar */}
         <div className="hidden md:flex items-center space-x-4 border-r border-gray-100 pr-6">
           <div className="flex items-center space-x-2 text-text-muted">

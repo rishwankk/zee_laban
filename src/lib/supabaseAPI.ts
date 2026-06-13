@@ -265,7 +265,7 @@ export const supabaseAPI = {
       .select('value')
       .eq('key', `salaf_locked_${storeId}`)
       .maybeSingle();
-    if (error || !data) return true; // default locked
+    if (error || !data) return false; // default unlocked
     return data.value === 'true';
   },
 
@@ -277,6 +277,40 @@ export const supabaseAPI = {
     if (isClient()) {
       window.dispatchEvent(new CustomEvent('lbn_realtime_salaf_lock', { detail: { storeId, isLocked } }));
     }
+  },
+
+  getStaffLockTime: async (storeId: string): Promise<number> => {
+    const { data, error } = await supabase!
+      .from('system_settings')
+      .select('value')
+      .eq('key', `staff_lock_time_${storeId}`)
+      .maybeSingle();
+    if (error || !data) return 0; // 0 means no auto-lock
+    return parseInt(data.value, 10) || 0;
+  },
+
+  setStaffLockTime: async (storeId: string, minutes: number): Promise<void> => {
+    const { error } = await supabase!
+      .from('system_settings')
+      .upsert({ key: `staff_lock_time_${storeId}`, value: minutes.toString() });
+    if (error) throw new Error(error.message);
+  },
+
+  getStaffPassword: async (storeId: string): Promise<string> => {
+    const { data, error } = await supabase!
+      .from('system_settings')
+      .select('value')
+      .eq('key', `staff_password_${storeId}`)
+      .maybeSingle();
+    if (error || !data) return 'admin123'; // Default password
+    return data.value;
+  },
+
+  setStaffPassword: async (storeId: string, newPassword: string): Promise<void> => {
+    const { error } = await supabase!
+      .from('system_settings')
+      .upsert({ key: `staff_password_${storeId}`, value: newPassword });
+    if (error) throw new Error(error.message);
   },
 
   getAdvancesByStore: async (storeId: string): Promise<(StaffAdvance & { staff: Staff })[]> => {

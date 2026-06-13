@@ -38,6 +38,9 @@ export const useAuthStore = create<AuthState>((set) => ({
         store = stores.find(s => s.id === user.store_id) || null;
       }
 
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('lbn_session_email', user.email);
+      }
       set({ user, store, isLoading: false });
       return user;
     } catch (err: any) {
@@ -47,6 +50,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('lbn_session_email');
+    }
     set({ user: null, store: null, error: null });
   },
 

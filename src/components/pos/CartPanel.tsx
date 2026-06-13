@@ -141,6 +141,7 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
       <div class="center bold" style="font-size: 16px; margin-bottom: 4px; letter-spacing: 1.5px;">ZEE LABAN</div>
       <div class="center" style="font-size: 9px; margin-bottom: 2px;">${store?.name || 'Main Outlet'}</div>
       <div class="center" style="font-size: 9px; color: #333;">${store?.location || 'Calicut Junction'} | Ph: ${store?.owner_mobile || '+91 7994776519'}</div>
+      ${store?.gst_number ? `<div class="center" style="font-size: 9px; font-weight: bold; margin-top: 2px;">GSTIN: ${store.gst_number}</div>` : ''}
       <div class="line"></div>
       <div class="center bold" style="font-size: 10px; margin-bottom: 6px; letter-spacing: 1px;">TAX INVOICE</div>
       <table style="margin-bottom: 6px; font-size: 9px;">

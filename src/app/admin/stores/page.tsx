@@ -31,6 +31,7 @@ export default function AdminStoresPage() {
   const [newOwnerPassword, setNewOwnerPassword] = useState('');
   const [newLocation, setNewLocation] = useState('');
   const [newPincode, setNewPincode] = useState('');
+  const [newGstNumber, setNewGstNumber] = useState('');
 
   // Edit Modal states
   const [showEditStore, setShowEditStore] = useState(false);
@@ -42,6 +43,7 @@ export default function AdminStoresPage() {
   const [editOwnerPassword, setEditOwnerPassword] = useState('');
   const [editLocation, setEditLocation] = useState('');
   const [editPincode, setEditPincode] = useState('');
+  const [editGstNumber, setEditGstNumber] = useState('');
 
   // Store-wise Sales Modal States
   const [selectedStoreForSales, setSelectedStoreForSales] = useState<Store | null>(null);
@@ -123,7 +125,8 @@ export default function AdminStoresPage() {
         owner_email: newOwnerEmail,
         owner_password: newOwnerPassword,
         location: newLocation,
-        pincode: newPincode
+        pincode: newPincode,
+        gst_number: newGstNumber || undefined
       });
 
       setShowAddStore(false);
@@ -134,6 +137,7 @@ export default function AdminStoresPage() {
       setNewOwnerPassword('');
       setNewLocation('');
       setNewPincode('');
+      setNewGstNumber('');
       
       setNotification("Store registered and Store Account created successfully! 🏪");
       setTimeout(() => setNotification(null), 3000);
@@ -152,6 +156,7 @@ export default function AdminStoresPage() {
     setEditOwnerPassword(st.owner_password || '');
     setEditLocation(st.location);
     setEditPincode(st.pincode);
+    setEditGstNumber(st.gst_number || '');
     setShowEditStore(true);
   };
 
@@ -178,7 +183,8 @@ export default function AdminStoresPage() {
         owner_email: editOwnerEmail,
         owner_password: editOwnerPassword,
         location: editLocation,
-        pincode: editPincode
+        pincode: editPincode,
+        gst_number: editGstNumber || undefined
       });
 
       setShowEditStore(false);
@@ -362,6 +368,16 @@ export default function AdminStoresPage() {
                       className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs outline-none focus:border-primary"
                     />
                   </div>
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">GST Number (Optional)</label>
+                    <input
+                      type="text"
+                      value={newGstNumber}
+                      onChange={(e) => setNewGstNumber(e.target.value)}
+                      placeholder="E.g., 29GGGGG1314R9Z6"
+                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs outline-none focus:border-primary"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -496,6 +512,16 @@ export default function AdminStoresPage() {
                       value={editPincode}
                       onChange={(e) => setEditPincode(e.target.value)}
                       placeholder="673001"
+                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs outline-none focus:border-primary font-semibold"
+                    />
+                  </div>
+                  <div className="col-span-3">
+                    <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1">GST Number (Optional)</label>
+                    <input
+                      type="text"
+                      value={editGstNumber}
+                      onChange={(e) => setEditGstNumber(e.target.value)}
+                      placeholder="E.g., 29GGGGG1314R9Z6"
                       className="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-xs outline-none focus:border-primary font-semibold"
                     />
                   </div>

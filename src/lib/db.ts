@@ -11,6 +11,7 @@ export interface Store {
   location: string;
   pincode: string;
   upi_id?: string;
+  gst_number?: string;
   is_active: boolean;
   created_at: string;
 }
