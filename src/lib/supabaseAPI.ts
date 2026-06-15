@@ -22,24 +22,57 @@ export const supabaseAPI = {
   getStores: async (): Promise<Store[]> => {
     const { data, error } = await supabase!.from('stores').select('*').order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
-    return data as Store[];
+    const stores = data as Store[];
+
+    // Load GST numbers from system_settings and merge into store objects
+    const { data: gstSettings } = await supabase!.from('system_settings').select('key, value').like('key', 'gst_number_%');
+    if (gstSettings) {
+      stores.forEach(s => {
+        const match = gstSettings.find(g => g.key === `gst_number_${s.id}`);
+        if (match) s.gst_number = match.value;
+      });
+    }
+    return stores;
   },
 
   addStore: async (store: Omit<Store, 'id' | 'is_active' | 'created_at'>): Promise<Store> => {
+    const { gst_number, ...dbFields } = store as any;
+    const storeId = `str-${Date.now()}`;
     const { data, error } = await supabase!.from('stores').insert({
-      id: `str-${Date.now()}`,
-      ...store,
+      id: storeId,
+      ...dbFields,
       is_active: true,
       created_at: new Date().toISOString()
     }).select().single();
     if (error) throw new Error(error.message);
-    return data as Store;
+
+    // Save GST number separately in system_settings
+    if (gst_number) {
+      await supabase!.from('system_settings').upsert({ key: `gst_number_${storeId}`, value: gst_number });
+    }
+    const result = data as Store;
+    result.gst_number = gst_number || undefined;
+    return result;
   },
 
   updateStore: async (id: string, updates: Partial<Store>): Promise<Store> => {
-    const { data, error } = await supabase!.from('stores').update(updates).eq('id', id).select().single();
+    const { gst_number, ...dbFields } = updates as any;
+
+    // Update store fields (without gst_number)
+    const { data, error } = await supabase!.from('stores').update(dbFields).eq('id', id).select().single();
     if (error) throw new Error(error.message);
-    return data as Store;
+
+    // Save or clear GST number in system_settings
+    if (gst_number !== undefined) {
+      if (gst_number) {
+        await supabase!.from('system_settings').upsert({ key: `gst_number_${id}`, value: gst_number });
+      } else {
+        await supabase!.from('system_settings').delete().eq('key', `gst_number_${id}`);
+      }
+    }
+    const result = data as Store;
+    result.gst_number = gst_number || undefined;
+    return result;
   },
 
   deleteStore: async (id: string): Promise<void> => {

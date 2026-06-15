@@ -128,7 +128,7 @@ export default function AdminSettingsPage() {
           <div className="flex-1 text-white">
             <div className="flex items-center space-x-2.5 mb-1">
               <h3 className="font-display text-xl font-black tracking-tight">
-                {user?.name || 'Rishwan K (Super Admin)'}
+                {user?.name || 'Super Admin'}
               </h3>
               <span className="inline-flex items-center space-x-1 rounded-full bg-accent/20 border border-accent/30 px-2.5 py-0.5 text-[9px] font-black text-accent uppercase tracking-wider">
                 <Crown className="h-3 w-3" />

@@ -168,19 +168,19 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
                   width: 76mm;
                   margin: 0 auto;
                   padding: 2mm;
-                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-                  font-size: 10px;
+                  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+                  font-size: 11px;
                   line-height: 1.4;
                   color: #000;
                 }
+                table { width: 100%; border-collapse: collapse; font-family: inherit; font-size: inherit; }
+                th, td { padding: 4px 0; vertical-align: top; font-family: inherit; font-size: inherit; }
+                th { border-bottom: 1px dashed #000; padding-bottom: 4px; text-transform: uppercase; font-size: 10px; letter-spacing: 0.5px; }
                 .center { text-align: center; }
                 .right { text-align: right; }
                 .left { text-align: left; }
                 .bold { font-weight: bold; }
-                .line { border-top: 1px solid #000; margin: 8px 0; }
-                table { width: 100%; border-collapse: collapse; }
-                th, td { padding: 3px 0; vertical-align: top; }
-                th { border-bottom: 1px solid #000; padding-bottom: 5px; text-transform: uppercase; font-size: 9px; letter-spacing: 0.5px; }
+                .line { border-top: 1px dashed #000; margin: 8px 0; }
               </style>
             </head>
             <body>
@@ -214,7 +214,9 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
 
     // Send a simple test block
     const testHtml = `
-      <div class="center bold" style="font-size: 14px;">LABAN DESSERTS</div>
+      <div style="text-align: center; margin-bottom: 5px;">
+        <img src="/image.png" style="width: 100px; height: auto; filter: grayscale(100%); mix-blend-mode: multiply;" alt="Logo" />
+      </div>
       <div class="center">*** TEST PRINT ***</div>
       <div class="line"></div>
       <div class="center">PRINTER STATUS: ONLINE</div>

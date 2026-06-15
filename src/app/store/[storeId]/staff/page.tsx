@@ -29,10 +29,16 @@ export default function StaffPage() {
   const { store, user } = useAuthStore();
 
   // Authentication State
-  const [isAuthenticated, setIsAuthenticated] = useState(true);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingLock, setIsCheckingLock] = useState(true);
   const [passwordInput, setPasswordInput] = useState('');
   const [authError, setAuthError] = useState('');
   const [lockTimer, setLockTimer] = useState<number>(0);
+  const [hasPassword, setHasPassword] = useState(false);
+  const [showSetupPassword, setShowSetupPassword] = useState(false);
+  const [setupPassword, setSetupPassword] = useState('');
+  const [setupConfirm, setSetupConfirm] = useState('');
+  const [setupError, setSetupError] = useState('');
   
   // Password Change State
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -95,8 +101,20 @@ export default function StaffPage() {
 
       const savedTimer = await api.getStaffLockTime(store.id);
       setLockTimer(savedTimer);
+
+      // Check if a lock password has been set
+      const savedPw = await api.getStaffPassword(store.id);
+      const passwordIsSet = savedPw !== '1234';
+      setHasPassword(passwordIsSet);
+
+      // If no password set, auto-unlock; if password exists, stay locked
+      if (!passwordIsSet) {
+        setIsAuthenticated(true);
+      }
     } catch (err) {
       console.error("Failed to load staff portal data", err);
+    } finally {
+      setIsCheckingLock(false);
     }
   };
 
@@ -303,6 +321,18 @@ export default function StaffPage() {
     };
   };
 
+  // ─── LOADING CHECK ───
+  if (isCheckingLock) {
+    return (
+      <div className="flex h-full min-h-[60vh] items-center justify-center p-4">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <p className="text-sm font-semibold text-slate-400">Checking access...</p>
+        </div>
+      </div>
+    );
+  }
+
   // ─── AUTHENTICATION SCREEN ───
   if (!isAuthenticated) {
     return (
@@ -374,7 +404,13 @@ export default function StaffPage() {
           </div>
 
           <button
-            onClick={() => setIsAuthenticated(false)}
+            onClick={async () => {
+              if (!hasPassword) {
+                setShowSetupPassword(true);
+              } else {
+                setIsAuthenticated(false);
+              }
+            }}
             className="flex items-center space-x-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-white transition-all active:scale-95 cursor-pointer shadow-sm"
           >
             <Lock className="h-4 w-4 text-slate-300" />
@@ -1189,6 +1225,80 @@ export default function StaffPage() {
           </div>
         );
       })()}
+
+
+      {/* ─── SETUP PASSWORD MODAL ─── */}
+      {showSetupPassword && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-2xl border border-slate-100 animate-scale-up">
+            <div className="text-center mb-6">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-50 text-amber-500 mb-4">
+                <ShieldCheck className="h-7 w-7" />
+              </div>
+              <h3 className="font-display text-xl font-black text-slate-800">Set Lock Password</h3>
+              <p className="text-xs font-semibold text-slate-400 mt-1">Create a password to protect the Staff Hub. You&apos;ll need this to unlock it later.</p>
+            </div>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              if (!store) return;
+              if (setupPassword.length < 4) {
+                setSetupError('Password must be at least 4 characters');
+                return;
+              }
+              if (setupPassword !== setupConfirm) {
+                setSetupError('Passwords do not match');
+                return;
+              }
+              await api.setStaffPassword(store.id, setupPassword);
+              setHasPassword(true);
+              setShowSetupPassword(false);
+              setSetupPassword('');
+              setSetupConfirm('');
+              setSetupError('');
+              setIsAuthenticated(false); // Lock the hub immediately
+            }} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5">New Password</label>
+                <input
+                  type="password"
+                  value={setupPassword}
+                  onChange={(e) => setSetupPassword(e.target.value)}
+                  placeholder="Enter password"
+                  required
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3.5 text-center font-mono text-lg font-black tracking-widest text-slate-800 outline-none focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1.5">Confirm Password</label>
+                <input
+                  type="password"
+                  value={setupConfirm}
+                  onChange={(e) => setSetupConfirm(e.target.value)}
+                  placeholder="Confirm password"
+                  required
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-3.5 text-center font-mono text-lg font-black tracking-widest text-slate-800 outline-none focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all"
+                />
+              </div>
+              {setupError && <p className="text-xs font-bold text-red-500 text-center animate-shake">{setupError}</p>}
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setShowSetupPassword(false); setSetupPassword(''); setSetupConfirm(''); setSetupError(''); }}
+                  className="flex-1 rounded-2xl border border-slate-200 py-3.5 text-xs font-black uppercase tracking-wider text-slate-500 hover:bg-slate-50 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 rounded-2xl bg-primary hover:bg-primary-dark py-3.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/20 transition-all active:scale-[0.98] cursor-pointer"
+                >
+                  Set & Lock
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

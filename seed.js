@@ -15,7 +15,7 @@ async function seed() {
 
   console.log('Seeding admin user...');
   const { error: err2 } = await supabase.from('users').upsert([
-    { id: 'usr-001', name: 'Rishwan K (Super Admin)', email: 'admin@laban.com', role: 'admin' }
+    { id: 'usr-001', name: '(Super Admin)', email: 'admin@laban.com', role: 'admin' }
   ]);
   if (err2) console.error('Err2:', err2);
 

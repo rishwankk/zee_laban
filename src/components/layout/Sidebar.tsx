@@ -3,15 +3,15 @@
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/store/useAuthStore';
-import { 
-  LayoutDashboard, 
-  Store, 
-  Menu as MenuIcon, 
-  BarChart3, 
-  Users, 
-  ShoppingBag, 
-  Layers, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Store,
+  Menu as MenuIcon,
+  BarChart3,
+  Users,
+  ShoppingBag,
+  Layers,
+  LogOut,
   Sparkles,
   ClipboardList,
   X,
@@ -56,9 +56,8 @@ export default function Sidebar({ storeId }: SidebarProps) {
   const links = isAdmin ? adminLinks : storeLinks;
 
   return (
-    <aside className={`fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-col bg-primary-dark text-white border-r border-blue-900/50 select-none transition-transform duration-300 ease-out lg:static lg:w-64 lg:translate-x-0 print:hidden ${
-      isMobileSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
-    }`}>
+    <aside className={`fixed inset-y-0 left-0 z-50 flex h-screen w-72 flex-col bg-primary-dark text-white border-r border-blue-900/50 select-none transition-transform duration-300 ease-out lg:static lg:w-64 lg:translate-x-0 print:hidden ${isMobileSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'
+      }`}>
       {/* Brand Header */}
       <div className="flex h-20 items-center justify-between px-6 border-b border-blue-900/30 bg-primary-dark/40">
         <div className="flex items-center space-x-3">
@@ -90,17 +89,16 @@ export default function Sidebar({ storeId }: SidebarProps) {
         {links.map((link) => {
           const isActive = pathname === link.href;
           const Icon = link.icon;
-          
+
           return (
             <Link
               key={link.name}
               href={link.href}
               onClick={() => toggleMobileSidebar(false)}
-              className={`flex items-center space-x-3.5 rounded-xl px-4 py-3.5 text-sm font-semibold tracking-wide transition-all ${
-                isActive
-                  ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-[1.02]'
-                  : 'text-blue-100/70 hover:bg-blue-900/30 hover:text-white'
-              }`}
+              className={`flex items-center space-x-3.5 rounded-xl px-4 py-3.5 text-sm font-semibold tracking-wide transition-all ${isActive
+                ? 'bg-primary text-white shadow-lg shadow-primary/20 scale-[1.02]'
+                : 'text-blue-100/70 hover:bg-blue-900/30 hover:text-white'
+                }`}
             >
               <Icon className={`h-5 w-5 ${isActive ? 'text-white' : 'text-blue-300/60'}`} />
               <span>{link.name}</span>

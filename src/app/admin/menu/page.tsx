@@ -37,6 +37,12 @@ export default function AdminMenuPage() {
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
   const [editCategoryName, setEditCategoryName] = useState('');
 
+  // Product edit states
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [editProductName, setEditProductName] = useState('');
+  const [editProductPrice, setEditProductPrice] = useState('');
+  const [editProductDesc, setEditProductDesc] = useState('');
+
   // Notifications
   const [notification, setNotification] = useState<string | null>(null);
 
@@ -118,6 +124,25 @@ export default function AdminMenuPage() {
       setTimeout(() => setNotification(null), 2500);
     } catch (err) {
       console.error("Failed to delete category", err);
+    }
+  };
+
+  const handleUpdateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+
+    try {
+      await api.updateProduct(editingProduct.id, {
+        name: editProductName,
+        price: parseFloat(editProductPrice) || 0,
+        description: editProductDesc
+      });
+      setEditingProduct(null);
+      await loadCatalog();
+      setNotification("Product updated successfully! ✨");
+      setTimeout(() => setNotification(null), 2500);
+    } catch (err) {
+      console.error("Failed to update product", err);
     }
   };
 
@@ -311,14 +336,29 @@ export default function AdminMenuPage() {
                     </button>
                   </td>
 
-                  {/* Delete */}
+                  {/* Actions */}
                   <td className="py-4 text-center">
-                    <button
-                      onClick={() => handleDeleteProduct(product.id)}
-                      className="text-text-muted/50 hover:text-danger p-1.5 rounded-lg hover:bg-red-50/60 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="h-4.5 w-4.5" />
-                    </button>
+                    <div className="flex justify-center items-center space-x-1">
+                      <button
+                        onClick={() => {
+                          setEditingProduct(product);
+                          setEditProductName(product.name);
+                          setEditProductPrice(product.price.toString());
+                          setEditProductDesc(product.description || '');
+                        }}
+                        className="text-text-muted/50 hover:text-blue-500 p-1.5 rounded-lg hover:bg-blue-50/60 transition-colors cursor-pointer"
+                        title="Edit Product"
+                      >
+                        <Edit2 className="h-4.5 w-4.5" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteProduct(product.id)}
+                        className="text-text-muted/50 hover:text-danger p-1.5 rounded-lg hover:bg-red-50/60 transition-colors cursor-pointer"
+                        title="Delete Product"
+                      >
+                        <Trash2 className="h-4.5 w-4.5" />
+                      </button>
+                    </div>
                   </td>
 
                 </tr>
@@ -544,6 +584,74 @@ export default function AdminMenuPage() {
                 Close View
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: EDIT PRODUCT */}
+      {/* ======================================================== */}
+      {editingProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md rounded-[24px] bg-white p-7 shadow-[0_20px_50px_-12px_rgba(0,0,0,0.25)] animate-slide-up border border-white">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-sm font-black text-text-primary uppercase tracking-wide">
+                Edit Product
+              </h3>
+              <button 
+                onClick={() => setEditingProduct(null)}
+                className="rounded-full bg-slate-100 p-1.5 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateProduct} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted mb-1.5 ml-1">Product Name</label>
+                <input
+                  required
+                  autoFocus
+                  type="text"
+                  value={editProductName}
+                  onChange={e => setEditProductName(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs font-bold text-text-primary outline-none focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-gray-300"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted mb-1.5 ml-1">Price (₹)</label>
+                <input
+                  required
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={editProductPrice}
+                  onChange={e => setEditProductPrice(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs font-bold text-text-primary outline-none focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-gray-300"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase tracking-widest text-text-muted mb-1.5 ml-1">Kitchen Description</label>
+                <textarea
+                  rows={2}
+                  value={editProductDesc}
+                  onChange={e => setEditProductDesc(e.target.value)}
+                  placeholder="Optional notes for kitchen..."
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs font-semibold text-text-primary outline-none focus:border-primary focus:bg-white focus:ring-2 focus:ring-primary/10 transition-all placeholder:text-gray-300 resize-none"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full rounded-xl bg-slate-800 hover:bg-slate-900 py-3.5 text-xs font-black text-white shadow-lg shadow-slate-800/20 transition-all active:scale-[0.98]"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

@@ -138,13 +138,15 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
 
     // Customer Copy
     const customerInvoice = `
-      <div class="center bold" style="font-size: 16px; margin-bottom: 4px; letter-spacing: 1.5px;">ZEE LABAN</div>
+      <div style="text-align: center; margin-bottom: 4px;">
+        <img src="/image.png" style="width: 120px; height: auto; display: block; margin: 0 auto; filter: grayscale(100%); mix-blend-mode: multiply;" alt="ZEE LABAN" />
+      </div>
       <div class="center" style="font-size: 9px; margin-bottom: 2px;">${store?.name || 'Main Outlet'}</div>
       <div class="center" style="font-size: 9px; color: #333;">${store?.location || 'Calicut Junction'} | Ph: ${store?.owner_mobile || '+91 7994776519'}</div>
       ${store?.gst_number ? `<div class="center" style="font-size: 9px; font-weight: bold; margin-top: 2px;">GSTIN: ${store.gst_number}</div>` : ''}
       <div class="line"></div>
       <div class="center bold" style="font-size: 10px; margin-bottom: 6px; letter-spacing: 1px;">TAX INVOICE</div>
-      <table style="margin-bottom: 6px; font-size: 9px;">
+      <table style="margin-bottom: 6px;">
         <tr>
           <td>Bill No: <span class="bold">${billNumber}</span></td>
           <td class="right">Date: <span class="bold">${formattedDate}</span></td>
@@ -169,9 +171,8 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
           ${itemsRows}
         </tbody>
       </table>
-      </table>
       <div class="line"></div>
-      <table style="font-size: 9px; margin-top: 4px;">
+      <table style="margin-top: 4px;">
         <tr>
           <td>Subtotal (excl. GST)</td>
           <td class="right">₹${totals.subtotal.toFixed(2)}</td>
@@ -201,7 +202,7 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
       <div class="center bold" style="font-size: 15px; margin-bottom: 4px; letter-spacing: 1px;">KITCHEN COPY</div>
       <div class="center" style="font-size: 9px; margin-bottom: 6px;">${store?.name || 'Main Outlet'}</div>
       <div class="line"></div>
-      <table style="margin-bottom: 6px; font-size: 10px;">
+      <table style="margin-bottom: 6px;">
         <tr>
           <td>KOT: <span class="bold">${billNumber}</span></td>
           <td class="right">Time: <span class="bold">${formattedTime}</span></td>
