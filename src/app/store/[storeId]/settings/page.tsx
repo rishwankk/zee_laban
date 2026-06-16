@@ -225,8 +225,8 @@ export default function StoreSettingsPage() {
           {/* Password notification */}
           {passwordNotification && (
             <div className={`rounded-xl p-3 mb-4 flex items-center space-x-2.5 text-xs font-bold animate-fade-in ${passwordNotification.type === 'success'
-                ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                : 'bg-red-50 text-red-700 border border-red-100'
+              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+              : 'bg-red-50 text-red-700 border border-red-100'
               }`}>
               {passwordNotification.type === 'success'
                 ? <CheckCircle className="h-4 w-4 shrink-0" />
@@ -327,8 +327,8 @@ export default function StoreSettingsPage() {
 
             {/* Online/Offline Badge */}
             <span className={`flex items-center space-x-1 rounded-full px-2.5 py-1 text-[9px] font-black uppercase tracking-wider ${isConnected
-                ? 'bg-emerald-100 text-emerald-700'
-                : 'bg-red-100 text-red-700'
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-red-100 text-red-700'
               }`}>
               <span className={`mr-1 h-1.5 w-1.5 rounded-full ${isConnected ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
               {isConnected ? 'Connected' : 'Offline'}
@@ -357,8 +357,8 @@ export default function StoreSettingsPage() {
                     type="button"
                     onClick={() => setSelectedType(iface.id as PrinterType)}
                     className={`flex flex-col items-center justify-center py-2.5 rounded-xl border text-[10px] sm:text-xs font-bold transition-all cursor-pointer ${selectedType === iface.id
-                        ? 'bg-primary text-white border-transparent shadow-md shadow-primary/10'
-                        : 'bg-white text-text-primary border-gray-100 hover:border-primary/20'
+                      ? 'bg-primary text-white border-transparent shadow-md shadow-primary/10'
+                      : 'bg-white text-text-primary border-gray-100 hover:border-primary/20'
                       }`}
                   >
                     <iface.icon className="h-4 w-4 mb-1" />

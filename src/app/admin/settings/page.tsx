@@ -83,12 +83,11 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="space-y-8 select-none animate-fade-in relative max-w-5xl mx-auto">
-      
+
       {/* Dynamic Toast Alert */}
       {notification && (
-        <div className={`fixed top-24 right-8 z-40 text-white rounded-2xl p-4 shadow-lg border flex items-center space-x-3 select-none animate-slide-down ${
-          notification.type === 'success' ? 'bg-primary border-blue-50/15' : 'bg-danger border-red-50/15'
-        }`}>
+        <div className={`fixed top-24 right-8 z-40 text-white rounded-2xl p-4 shadow-lg border flex items-center space-x-3 select-none animate-slide-down ${notification.type === 'success' ? 'bg-primary border-blue-50/15' : 'bg-danger border-red-50/15'
+          }`}>
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/20 text-white">
             <CheckCircle className="h-5 w-5 stroke-[2.5px]" />
           </div>
@@ -115,7 +114,7 @@ export default function AdminSettingsPage() {
         {/* Decorative glow */}
         <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl pointer-events-none"></div>
         <div className="absolute bottom-0 left-0 w-40 h-40 bg-accent/10 rounded-full -ml-10 -mb-10 blur-2xl pointer-events-none"></div>
-        
+
         <div className="relative z-10 p-8 flex flex-col sm:flex-row items-start sm:items-center gap-6">
           {/* Avatar */}
           <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-white/10 border-2 border-white/20 shadow-lg shadow-black/10 shrink-0">
@@ -165,7 +164,7 @@ export default function AdminSettingsPage() {
       {/* PASSWORD & EMAIL CHANGE FORMS */}
       {/* ═══════════════════════════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        
+
         {/* PASSWORD CHANGE */}
         <div className="rounded-3xl bg-white border border-gray-100 shadow-sm overflow-hidden">
           <div className="border-b border-gray-50 px-6 py-5 bg-gray-50/30 flex items-center space-x-3">
@@ -179,7 +178,7 @@ export default function AdminSettingsPage() {
           </div>
 
           <form onSubmit={handlePasswordChange} className="p-6 space-y-5">
-            
+
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
                 Current Password
@@ -262,7 +261,7 @@ export default function AdminSettingsPage() {
           </div>
 
           <form onSubmit={handleEmailChange} className="p-6 space-y-5">
-            
+
             <div>
               <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">
                 Current Login Email

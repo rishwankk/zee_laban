@@ -5,6 +5,7 @@ import { useCartStore, CartItem } from '@/store/useCartStore';
 import { usePrinterStore } from '@/store/usePrinterStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { api, Product, Stock } from '@/lib/supabase';
+import { getEscPosImage } from '@/lib/escposUtils';
 
 import PrinterStatus from './PrinterStatus';
 import PrinterOfflineModal from './PrinterOfflineModal';
@@ -117,7 +118,7 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
     if (paymentMethod === 'UPI') {
       if (vpa && vpa.trim()) {
         const upiLink = `upi://pay?pa=${vpa}&am=${totals.total.toFixed(2)}&cu=INR&tn=Verified Merchant Account`;
-        const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&margin=5&data=${encodeURIComponent(upiLink)}`;
+        const qrCodeUrl = `https://quickchart.io/qr?text=${encodeURIComponent(upiLink)}&size=150`;
         upiQrSection = `
           <div class="center" style="margin-top: 8px;">
             <div style="font-size: 10px; font-weight: bold; margin-bottom: 4px;">Scan to Pay via UPI</div>
@@ -136,10 +137,9 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
       }
     }
 
-    // Customer Copy
     const customerInvoice = `
       <div style="text-align: center; margin-bottom: 4px;">
-        <img src="/image.png" style="width: 120px; height: auto; display: block; margin: 0 auto; filter: grayscale(100%); mix-blend-mode: multiply;" alt="ZEE LABAN" />
+        <img src="${window.location.origin}/logo.png" style="width: 120px; height: auto; display: block; margin: 0 auto;" alt="ZEE LABAN" />
       </div>
       <div class="center" style="font-size: 9px; margin-bottom: 2px;">${store?.name || 'Main Outlet'}</div>
       <div class="center" style="font-size: 9px; color: #333;">${store?.location || 'Calicut Junction'} | Ph: ${store?.owner_mobile || '+91 7994776519'}</div>
@@ -197,7 +197,6 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
       <div class="center bold" style="margin-top: 8px; font-size: 10px; letter-spacing: 0.5px;">Thank you! Visit Again 😊</div>
     `;
 
-    // Kitchen Order Ticket (KOT)
     const kitchenCopy = `
       <div class="center bold" style="font-size: 15px; margin-bottom: 4px; letter-spacing: 1px;">KITCHEN COPY</div>
       <div class="center" style="font-size: 9px; margin-bottom: 6px;">${store?.name || 'Main Outlet'}</div>
@@ -228,23 +227,17 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
       <div class="center bold" style="font-size: 11px; margin-top: 10px; letter-spacing: 1.5px;">*** END OF KOT ***</div>
     `;
 
-    return `
-      <div style="page-break-after: always; break-after: page; margin-bottom: 20px;">
-        ${customerInvoice}
-      </div>
-      <div>
-        ${kitchenCopy}
-      </div>
-    `;
+    return [
+      `<div>${customerInvoice}</div>`,
+      `<div>${kitchenCopy}</div>`
+    ];
   };
 
-  // Perform invoice registration & printing trigger
   const handleCheckout = async () => {
     if (isEmpty || isSubmitting || !user || !store) return;
     setIsSubmitting(true);
 
     try {
-      // 1. Save the completed record to Supabase / Production database FIRST
       const bill = await api.saveBill(
         store.id,
         user.id,
@@ -255,18 +248,133 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
         totals
       );
 
-      // 2. Establish the sequential bill registration layout details with real bill number
-      const printBlockHtml = buildReceiptHtml(bill.bill_number);
+      // Helper for raw buffer generation
+      const buildReceiptRawBuffers = async (billNumber: string): Promise<Uint8Array[]> => {
+        const formattedDate = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+        const formattedTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+        
+        const padRight = (str: string, length: number) => str.padEnd(length, ' ').substring(0, length);
+        const padLeft = (str: string, length: number) => str.padStart(length, ' ').substring(0, length);
+        const center = (str: string, length: number) => {
+          if (str.length >= length) return str.substring(0, length);
+          const leftPad = Math.floor((length - str.length) / 2);
+          const rightPad = length - str.length - leftPad;
+          return ' '.repeat(leftPad) + str + ' '.repeat(rightPad);
+        };
 
-      // 3. Dispatch printer socket check
+        const width = 48;
+        const divider = '-'.repeat(width);
+        const equalDivider = '='.repeat(width);
+
+        let customer = '\n';
+        customer += '\x1B\x61\x01';
+        customer += (store?.name || 'Main Outlet') + '\n';
+        customer += ((store?.location || 'Calicut Junction') + ' | Ph: ' + (store?.owner_mobile || '+91 7994776519')) + '\n';
+        if (store?.gst_number) {
+          customer += ('GSTIN: ' + store.gst_number) + '\n';
+        }
+        customer += '\x1B\x61\x00';
+        customer += divider + '\n';
+        customer += center('TAX INVOICE', width) + '\n';
+        customer += padRight(`Bill No: ${billNumber}`, 24) + padLeft(`Date: ${formattedDate}`, 24) + '\n';
+        customer += padRight(`Type: ${orderType}`, 24) + padLeft(`Time: ${formattedTime}`, 24) + '\n';
+        if (customerName) {
+          customer += `Customer: ${customerName} ${customerMobile ? '(' + customerMobile + ')' : ''}\n`;
+        }
+        customer += divider + '\n';
+        customer += padRight('ITEM', 22) + padLeft('QTY', 5) + padLeft('RATE', 9) + padLeft('AMT', 12) + '\n';
+        customer += divider + '\n';
+
+        cartItems.forEach(item => {
+          const name = padRight(item.product.name, 22);
+          const qty = padLeft(item.quantity.toString(), 5);
+          const rate = padLeft(item.product.price.toFixed(2), 9);
+          const total = padLeft((item.product.price * item.quantity).toFixed(2), 12);
+          customer += `${name}${qty}${rate}${total}\n`;
+        });
+
+        customer += divider + '\n';
+        customer += padRight('Subtotal (excl. GST)', 36) + padLeft(totals.subtotal.toFixed(2), 12) + '\n';
+        customer += padRight('CGST (2.5%)', 36) + padLeft(totals.cgst.toFixed(2), 12) + '\n';
+        customer += padRight('SGST (2.5%)', 36) + padLeft(totals.sgst.toFixed(2), 12) + '\n';
+        customer += equalDivider + '\n';
+        customer += padRight('GRAND TOTAL', 36) + padLeft(totals.total.toFixed(2), 12) + '\n';
+        customer += equalDivider + '\n';
+        customer += center(`Payment: ${paymentMethod}`, width) + '\n';
+        
+        if (paymentMethod === 'UPI' && store?.upi_id) {
+          const upiLink = `upi://pay?pa=${store.upi_id}&am=${totals.total.toFixed(2)}&cu=INR&tn=Verified Merchant Account`;
+          const pL = (upiLink.length + 3) % 256;
+          const pH = Math.floor((upiLink.length + 3) / 256);
+          
+          customer += '\n' + center('Scan to Pay via UPI', width) + '\n';
+          
+          customer += '\x1B\x61\x01'; 
+          customer += '\x1D\x28\x6B\x04\x00\x31\x41\x32\x00'; 
+          customer += '\x1D\x28\x6B\x03\x00\x31\x43\x06'; 
+          customer += '\x1D\x28\x6B\x03\x00\x31\x45\x30'; 
+          customer += '\x1D\x28\x6B' + String.fromCharCode(pL) + String.fromCharCode(pH) + '\x31\x50\x30' + upiLink; 
+          customer += '\x1D\x28\x6B\x03\x00\x31\x51\x30'; 
+          customer += '\x1B\x61\x00'; 
+          
+          customer += '\n' + center(`VPA: ${store.upi_id}`, width) + '\n';
+        }
+
+        const taxNote = cartItems.some(i => i.product.gst_inclusive) ? '*Prices inclusive of GST*' : '*Prices exclusive of GST*';
+        customer += '\n' + center(taxNote, width) + '\n\n';
+        customer += center('Thank you! Visit Again', width) + '\n\n\n\n';
+
+        let kitchen = '\n';
+        kitchen += center('KITCHEN COPY', width) + '\n';
+        kitchen += center(store?.name || 'Main Outlet', width) + '\n';
+        kitchen += divider + '\n';
+        kitchen += padRight(`KOT: ${billNumber}`, 24) + padLeft(`Time: ${formattedTime}`, 24) + '\n';
+        kitchen += padRight(`Type: ${orderType}`, 24) + padLeft(`Date: ${formattedDate}`, 24) + '\n';
+        kitchen += divider + '\n';
+        kitchen += padRight('KITCHEN ITEM', 38) + padLeft('QTY', 10) + '\n';
+        kitchen += divider + '\n';
+        
+        cartItems.forEach(item => {
+          kitchen += padRight(item.product.name, 38) + padLeft(item.quantity.toString(), 10) + '\n';
+        });
+        
+        kitchen += '\n' + center('*** END OF KOT ***', width) + '\n\n\n\n';
+
+        const encoder = new TextEncoder();
+        const initBytes = new Uint8Array([0x1B, 0x40]);
+        const cutBytes = new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]);
+        
+        const logoBytes = await getEscPosImage(`${window.location.origin}/logo.png`, 180);
+        
+        const customerTextBytes = encoder.encode(customer);
+        const customerBuffer = new Uint8Array(initBytes.length + logoBytes.length + customerTextBytes.length + cutBytes.length);
+        let offset = 0;
+        customerBuffer.set(initBytes, offset); offset += initBytes.length;
+        customerBuffer.set(logoBytes, offset); offset += logoBytes.length;
+        customerBuffer.set(customerTextBytes, offset); offset += customerTextBytes.length;
+        customerBuffer.set(cutBytes, offset); offset += cutBytes.length;
+
+        const kitchenTextBytes = encoder.encode(kitchen);
+        const kitchenBuffer = new Uint8Array(initBytes.length + kitchenTextBytes.length + cutBytes.length);
+        offset = 0;
+        kitchenBuffer.set(initBytes, offset); offset += initBytes.length;
+        kitchenBuffer.set(kitchenTextBytes, offset); offset += kitchenTextBytes.length;
+        kitchenBuffer.set(cutBytes, offset); offset += cutBytes.length;
+
+        return [customerBuffer, kitchenBuffer];
+      };
+
+      const htmlContents = buildReceiptHtml(bill.bill_number);
+      const rawBuffers = await buildReceiptRawBuffers(bill.bill_number);
+
       await triggerPrint({
-        htmlContent: printBlockHtml,
+        htmlContents,
+        rawBuffers,
         onComplete: async () => {
           setActiveBillNo(bill.bill_number);
           setSuccessBillDetails({ billNo: bill.bill_number, total: totals.total });
           onSuccess(bill.bill_number);
 
-          // Clear Cart
           clearCart();
           setTimeout(() => setSuccessBillDetails(null), 6000); // dismiss after 6s
         }
