@@ -181,7 +181,7 @@ export const supabaseAPI = {
       .select(`*, product:products(*)`)
       .eq('store_id', storeId);
     if (error) throw new Error(error.message);
-    
+
     // Fallback if joined product is an array instead of single object
     return (data as any[]).map(s => ({
       ...s,
@@ -250,7 +250,7 @@ export const supabaseAPI = {
       .eq('store_id', storeId)
       .order('updated_at', { ascending: false });
     if (error) throw new Error(error.message);
-    
+
     return (data as any[]).map(l => ({
       ...l,
       product: Array.isArray(l.product) ? l.product[0] : l.product
@@ -337,7 +337,7 @@ export const supabaseAPI = {
       .eq('store_id', storeId)
       .order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
-    
+
     return (data as any[]).map(a => ({
       ...a,
       staff: Array.isArray(a.staff) ? a.staff[0] : a.staff
@@ -394,7 +394,7 @@ export const supabaseAPI = {
       .eq('staff_id', staffId)
       .is('clock_out', null)
       .maybeSingle();
-      
+
     if (active) return active as ShiftLog;
 
     const { data, error } = await supabase!.from('shift_logs').insert({
@@ -444,9 +444,9 @@ export const supabaseAPI = {
   // ---------------------------------------------------------
   // STAFF PASSWORD
   // ---------------------------------------------------------
-  getStaffPassword: async (storeId: string): Promise<string> => {
+  getStaffPassword: async (storeId: string): Promise<string | null> => {
     const { data } = await supabase!.from('system_settings').select('value').eq('key', `staff_pw_${storeId}`).maybeSingle();
-    return data ? data.value : '1234';
+    return data ? data.value : null;
   },
 
   setStaffPassword: async (storeId: string, newPw: string): Promise<void> => {
@@ -464,7 +464,7 @@ export const supabaseAPI = {
       .eq('store_id', storeId)
       .order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
-    
+
     return (data as any[]).map(b => {
       const cashierName = b.cashier ? (Array.isArray(b.cashier) ? b.cashier[0].name : b.cashier.name) : "Store Desk";
       // Remove the nested cashier object to match local API return type
@@ -502,7 +502,7 @@ export const supabaseAPI = {
     const { data: store } = await supabase!.from('stores').select('name').eq('id', storeId).single();
     const storeWords = (store?.name || "LBN").split(" ");
     const storeCode = storeWords.map((w: string) => w[0] || '').join('').toUpperCase().substring(0, 3) || "LBN";
-    
+
     const year = new Date().getFullYear();
     const { count } = await supabase!.from('bills').select('*', { count: 'exact', head: true }).eq('store_id', storeId);
     const sequentialNum = String((count || 0) + 1).padStart(6, '0');
@@ -576,14 +576,14 @@ export const supabaseAPI = {
 
   updateBillAndItems: async (
     storeId: string,
-    billId: string, 
+    billId: string,
     updates: Partial<Bill>,
     newItems: { product: Product; quantity: number }[],
     totals: { subtotal: number; cgst: number; sgst: number; total: number }
   ): Promise<Bill> => {
     // 1. Get existing items
     const { data: existingItems } = await supabase!.from('bill_items').select('*').eq('bill_id', billId);
-    
+
     // 2. Restore all existing items stock
     if (existingItems) {
       for (const item of existingItems) {
@@ -631,28 +631,28 @@ export const supabaseAPI = {
       sgst: totals.sgst,
       total: totals.total
     };
-    
+
     const { data, error } = await supabase!.from('bills').update(billUpdates).eq('id', billId).select().single();
     if (error) throw new Error(error.message);
-    
+
     return data as Bill;
   },
 
-  getCustomerDirectory: async (storeId?: string): Promise<{name: string, mobile: string, visits: number, spent: number}[]> => {
+  getCustomerDirectory: async (storeId?: string): Promise<{ name: string, mobile: string, visits: number, spent: number }[]> => {
     let query = supabase!.from('bills').select('customer_mobile, customer_name, total');
     if (storeId) {
       query = query.eq('store_id', storeId);
     }
     const { data: bills, error } = await query;
     if (error) throw new Error(error.message);
-    
-    const directoryMap: Record<string, {name: string, mobile: string, visits: number, spent: number}> = {};
-    
+
+    const directoryMap: Record<string, { name: string, mobile: string, visits: number, spent: number }> = {};
+
     bills.forEach(b => {
       if (b.customer_mobile && b.customer_mobile.trim()) {
         const key = b.customer_mobile.trim();
         const name = b.customer_name || 'Guest Customer';
-        
+
         if (!directoryMap[key]) {
           directoryMap[key] = {
             name,
@@ -663,13 +663,13 @@ export const supabaseAPI = {
         }
         directoryMap[key].visits += 1;
         directoryMap[key].spent += Number(b.total);
-        
+
         if (b.customer_name && directoryMap[key].name === 'Guest Customer') {
           directoryMap[key].name = b.customer_name;
         }
       }
     });
-    
+
     return Object.values(directoryMap).sort((a, b) => b.spent - a.spent);
   },
 
@@ -679,14 +679,14 @@ export const supabaseAPI = {
   getGlobalAdminReports: async () => {
     const { data: bills, error: bErr } = await supabase!.from('bills').select('total, cgst, sgst, store_id');
     const { data: stores, error: sErr } = await supabase!.from('stores').select('id, name');
-    
+
     if (bErr) throw new Error(bErr.message);
     if (sErr) throw new Error(sErr.message);
 
     let totalRevenue = 0;
     let totalOrders = bills.length;
     let totalGst = 0;
-    
+
     const storeBreakdownMap: Record<string, { name: string; revenue: number; orders: number; gst: number }> = {};
     stores.forEach(s => {
       storeBreakdownMap[s.id] = { name: s.name, revenue: 0, orders: 0, gst: 0 };
@@ -733,7 +733,7 @@ export const supabaseAPI = {
     if (newPassword.length < 6) {
       throw new Error('Password must be at least 6 characters.');
     }
-    
+
     const { error } = await supabase!.from('system_settings').upsert({ key: 'admin_password', value: newPassword });
     if (error) throw new Error(error.message);
     return true;
@@ -747,13 +747,13 @@ export const supabaseAPI = {
     if (!newEmail || !newEmail.includes('@')) {
       throw new Error('Please enter a valid email address.');
     }
-    
+
     const { error } = await supabase!.from('system_settings').upsert({ key: 'admin_email', value: newEmail });
     if (error) throw new Error(error.message);
-    
+
     // Also update admin user record
     await supabase!.from('users').update({ email: newEmail }).eq('role', 'admin');
-    
+
     return true;
   },
 
@@ -777,7 +777,7 @@ export const supabaseAPI = {
     // 1. Check admin
     const adminEmail = await supabaseAPI.getAdminEmailAsync();
     const adminPassword = await supabaseAPI.getAdminPasswordAsync();
-    
+
     if (email.toLowerCase() === adminEmail.toLowerCase()) {
       if (password !== adminPassword) {
         throw new Error('Incorrect password.');
@@ -794,7 +794,7 @@ export const supabaseAPI = {
       if (password !== store.owner_password) {
         throw new Error('Incorrect password.');
       }
-      
+
       const { data: storeUser } = await supabase!.from('users').select('*').ilike('email', email).maybeSingle();
       if (storeUser) {
         return storeUser as User;

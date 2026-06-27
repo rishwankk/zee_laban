@@ -126,3 +126,12 @@ export interface BillItem {
   unit_price: number;
   total_price: number;
 }
+
+export interface CustomerProfile {
+  id: string;
+  name: string;
+  mobile: string;
+  visits: number;
+  spent: number;
+}
+

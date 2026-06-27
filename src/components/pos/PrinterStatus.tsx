@@ -24,7 +24,11 @@ export default function PrinterStatus() {
 
   // Poll printer connection states during the session
   useEffect(() => {
-    startStatusPolling();
+    // Attempt auto-reconnect if browser supports it and permissions were previously granted
+    usePrinterStore.getState().autoConnectHardware().then((connected) => {
+      // Start polling status regardless of auto-connect success
+      startStatusPolling();
+    });
     return () => stopStatusPolling();
   }, [startStatusPolling, stopStatusPolling]);
 
@@ -35,7 +39,7 @@ export default function PrinterStatus() {
   };
 
   const handleDisconnect = () => {
-    usePrinterStore.setState({ isConnected: false, printerAddress: '', printerType: 'Bluetooth' });
+    usePrinterStore.getState().disconnectHardware();
   };
 
   const handleConnect = async (type: PrinterType) => {

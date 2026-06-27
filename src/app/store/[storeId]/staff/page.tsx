@@ -104,13 +104,14 @@ export default function StaffPage() {
 
       // Check if a lock password has been set
       const savedPw = await api.getStaffPassword(store.id);
-      const passwordIsSet = savedPw !== '1234';
+      const passwordIsSet = savedPw !== null;
       setHasPassword(passwordIsSet);
 
       // If no password set, auto-unlock; if password exists, stay locked
-      if (!passwordIsSet) {
-        setIsAuthenticated(true);
-      }
+      // REMOVED auto-unlock so it always asks for the password when returning to the page.
+      // if (!passwordIsSet) {
+      //   setIsAuthenticated(true);
+      // }
     } catch (err) {
       console.error("Failed to load staff portal data", err);
     } finally {
@@ -155,7 +156,8 @@ export default function StaffPage() {
     e.preventDefault();
     if (!store) return;
     const savedPw = await api.getStaffPassword(store.id);
-    if (passwordInput === savedPw) {
+    const validPw = savedPw !== null ? savedPw : '1234';
+    if (passwordInput === validPw) {
       setIsAuthenticated(true);
       setPasswordInput('');
       setAuthError('');
@@ -169,7 +171,8 @@ export default function StaffPage() {
     e.preventDefault();
     if (!store) return;
     const savedPw = await api.getStaffPassword(store.id);
-    if (currentPw !== savedPw) {
+    const validPw = savedPw !== null ? savedPw : '1234';
+    if (currentPw !== validPw) {
       setPwChangeError('Current password is incorrect');
       return;
     }
@@ -404,13 +407,7 @@ export default function StaffPage() {
           </div>
 
           <button
-            onClick={async () => {
-              if (!hasPassword) {
-                setShowSetupPassword(true);
-              } else {
-                setIsAuthenticated(false);
-              }
-            }}
+            onClick={() => setIsAuthenticated(false)}
             className="flex items-center space-x-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 px-4 py-2.5 text-[10px] font-black uppercase tracking-wider text-white transition-all active:scale-95 cursor-pointer shadow-sm"
           >
             <Lock className="h-4 w-4 text-slate-300" />

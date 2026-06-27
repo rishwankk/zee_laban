@@ -252,7 +252,7 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
       const buildReceiptRawBuffers = async (billNumber: string): Promise<Uint8Array[]> => {
         const formattedDate = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
         const formattedTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
-        
+
         const padRight = (str: string, length: number) => str.padEnd(length, ' ').substring(0, length);
         const padLeft = (str: string, length: number) => str.padStart(length, ' ').substring(0, length);
         const center = (str: string, length: number) => {
@@ -301,22 +301,22 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
         customer += padRight('GRAND TOTAL', 36) + padLeft(totals.total.toFixed(2), 12) + '\n';
         customer += equalDivider + '\n';
         customer += center(`Payment: ${paymentMethod}`, width) + '\n';
-        
+
         if (paymentMethod === 'UPI' && store?.upi_id) {
           const upiLink = `upi://pay?pa=${store.upi_id}&am=${totals.total.toFixed(2)}&cu=INR&tn=Verified Merchant Account`;
           const pL = (upiLink.length + 3) % 256;
           const pH = Math.floor((upiLink.length + 3) / 256);
-          
+
           customer += '\n' + center('Scan to Pay via UPI', width) + '\n';
-          
-          customer += '\x1B\x61\x01'; 
-          customer += '\x1D\x28\x6B\x04\x00\x31\x41\x32\x00'; 
-          customer += '\x1D\x28\x6B\x03\x00\x31\x43\x06'; 
-          customer += '\x1D\x28\x6B\x03\x00\x31\x45\x30'; 
-          customer += '\x1D\x28\x6B' + String.fromCharCode(pL) + String.fromCharCode(pH) + '\x31\x50\x30' + upiLink; 
-          customer += '\x1D\x28\x6B\x03\x00\x31\x51\x30'; 
-          customer += '\x1B\x61\x00'; 
-          
+
+          customer += '\x1B\x61\x01';
+          customer += '\x1D\x28\x6B\x04\x00\x31\x41\x32\x00';
+          customer += '\x1D\x28\x6B\x03\x00\x31\x43\x06';
+          customer += '\x1D\x28\x6B\x03\x00\x31\x45\x30';
+          customer += '\x1D\x28\x6B' + String.fromCharCode(pL) + String.fromCharCode(pH) + '\x31\x50\x30' + upiLink;
+          customer += '\x1D\x28\x6B\x03\x00\x31\x51\x30';
+          customer += '\x1B\x61\x00';
+
           customer += '\n' + center(`VPA: ${store.upi_id}`, width) + '\n';
         }
 
@@ -333,19 +333,19 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
         kitchen += divider + '\n';
         kitchen += padRight('KITCHEN ITEM', 38) + padLeft('QTY', 10) + '\n';
         kitchen += divider + '\n';
-        
+
         cartItems.forEach(item => {
           kitchen += padRight(item.product.name, 38) + padLeft(item.quantity.toString(), 10) + '\n';
         });
-        
+
         kitchen += '\n' + center('*** END OF KOT ***', width) + '\n\n\n\n';
 
         const encoder = new TextEncoder();
         const initBytes = new Uint8Array([0x1B, 0x40]);
         const cutBytes = new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]);
-        
+
         const logoBytes = await getEscPosImage(`${window.location.origin}/logo.png`, 180);
-        
+
         const customerTextBytes = encoder.encode(customer);
         const customerBuffer = new Uint8Array(initBytes.length + logoBytes.length + customerTextBytes.length + cutBytes.length);
         let offset = 0;

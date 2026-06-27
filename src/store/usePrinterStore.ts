@@ -19,6 +19,8 @@ interface PrinterState {
   setPrinterConfig: (type: PrinterType, address: string) => void;
   checkPrinterStatus: () => Promise<boolean>;
   connectHardware: () => Promise<boolean>;
+  disconnectHardware: () => void;
+  autoConnectHardware: () => Promise<boolean>;
   startStatusPolling: () => void;
   stopStatusPolling: () => void;
   sendRawData: (data: Uint8Array) => Promise<boolean>;
@@ -177,6 +179,78 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
     }
 
     set({ isConnected: false });
+    return false;
+  },
+
+  disconnectHardware: () => {
+    const { printerType, btDevice, usbDevice } = get();
+    
+    if (printerType === 'Bluetooth' && btDevice && btDevice.gatt) {
+      if (btDevice.gatt.connected) {
+        btDevice.gatt.disconnect();
+      }
+    }
+    
+    if (printerType === 'USB' && usbDevice) {
+      if (usbDevice.opened) {
+        usbDevice.close();
+      }
+    }
+    
+    set({ 
+      isConnected: false, 
+      btDevice: null, 
+      btCharacteristic: null, 
+      usbDevice: null, 
+      usbEndpoint: null 
+    });
+  },
+
+  autoConnectHardware: async () => {
+    const { printerType } = get();
+    
+    if (printerType === 'Bluetooth') {
+      try {
+        if (typeof window !== 'undefined' && 'bluetooth' in navigator && (navigator as any).bluetooth.getDevices) {
+          const devices = await (navigator as any).bluetooth.getDevices();
+          for (const device of devices) {
+            if (device.name === get().printerAddress || devices.length === 1) {
+              const server = await device.gatt.connect();
+              const services = await server.getPrimaryServices();
+              
+              let targetCharacteristic = null;
+              for (const service of services) {
+                const characteristics = await service.getCharacteristics();
+                for (const char of characteristics) {
+                  if (char.properties.write || char.properties.writeWithoutResponse) {
+                    targetCharacteristic = char;
+                    break;
+                  }
+                }
+                if (targetCharacteristic) break;
+              }
+
+              if (targetCharacteristic) {
+                device.addEventListener('gattserverdisconnected', () => {
+                  set({ isConnected: false, btDevice: null, btCharacteristic: null });
+                });
+
+                set({ 
+                  isConnected: true, 
+                  printerAddress: device.name || 'Bluetooth Printer',
+                  btDevice: device,
+                  btCharacteristic: targetCharacteristic
+                });
+                return true;
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Auto Bluetooth connection failed:", err);
+      }
+    }
+
     return false;
   },
 
