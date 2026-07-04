@@ -50,6 +50,21 @@ export const supabaseAPI = {
     if (gst_number) {
       await supabase!.from('system_settings').upsert({ key: `gst_number_${storeId}`, value: gst_number });
     }
+
+    // Initialize stock entries for all active products for the new store
+    const { data: products } = await supabase!.from('products').select('id').eq('is_active', true);
+    if (products && products.length > 0) {
+      const stockEntries = products.map((p: any) => ({
+        id: `stk-${storeId}-${p.id}`,
+        store_id: storeId,
+        product_id: p.id,
+        quantity: 0,
+        status: "out_of_stock",
+        updated_at: new Date().toISOString()
+      }));
+      await supabase!.from('stock').insert(stockEntries);
+    }
+
     const result = data as Store;
     result.gst_number = gst_number || undefined;
     return result;
@@ -147,12 +162,12 @@ export const supabaseAPI = {
     // After adding a product, add default stock for all stores
     const { data: stores } = await supabase!.from('stores').select('id');
     if (stores && stores.length > 0) {
-      const stockEntries = stores.map(store => ({
+      const stockEntries = stores.map((store: any) => ({
         id: `stk-${store.id}-${newProduct.id}`,
         store_id: store.id,
         product_id: newProduct.id,
-        quantity: 30,
-        status: "in_stock",
+        quantity: 0,
+        status: "out_of_stock",
         updated_at: new Date().toISOString()
       }));
       await supabase!.from('stock').insert(stockEntries);
