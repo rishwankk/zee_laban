@@ -94,6 +94,7 @@ export const supabaseAPI = {
     const { error } = await supabase!.from('stores').update({ is_active: false }).eq('id', id);
     if (error) throw new Error(error.message);
   },
+  
 
   // ---------------------------------------------------------
   // USERS
