@@ -425,7 +425,7 @@ export default function ReportsPage() {
       ${billToPrint.customer_name ? `<div>Customer: ${billToPrint.customer_name}</div>` : ''}
       ${billToPrint.customer_mobile ? `<div>Mobile: ${billToPrint.customer_mobile}</div>` : ''}
       <div class="line" style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
-      <table style="width: 100%; border-collapse: collapse;">
+      <table style="width: 100%; min-width: 600px; border-collapse: collapse;">
         <thead>
           <tr class="bold" style="font-weight: bold; border-bottom: 1px dashed #000;">
             <th style="text-align: left; width: 45%; padding-bottom: 4px;">Item</th>
@@ -439,7 +439,7 @@ export default function ReportsPage() {
         </tbody>
       </table>
       <div class="line" style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
-      <table style="width: 100%; font-size: 11px;">
+      <table style="width: 100%; min-width: 600px; font-size: 11px;">
         <tr>
           <td style="text-align: left; padding: 2px 0;">Subtotal:</td>
           <td style="text-align: right; padding: 2px 0;">₹${billToPrint.subtotal.toFixed(2)}</td>
@@ -472,7 +472,7 @@ export default function ReportsPage() {
       <div style="font-weight: bold; font-size: 12px; margin: 4px 0;">Type: ${orderType}</div>
       ${billToPrint.customer_name ? `<div>Customer: ${billToPrint.customer_name}</div>` : ''}
       <div class="line" style="border-bottom: 1px dashed #000; margin: 8px 0;"></div>
-      <table style="width: 100%; border-collapse: collapse;">
+      <table style="width: 100%; min-width: 600px; border-collapse: collapse;">
         <thead>
           <tr class="bold" style="font-weight: bold; border-bottom: 1px dashed #000;">
             <th style="text-align: left; width: 80%; padding-bottom: 4px;">Kitchen Item</th>
@@ -838,7 +838,7 @@ export default function ReportsPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full min-w-[600px] text-left border-collapse">
                     <thead>
                       <tr className="border-b border-gray-50 text-[10px] font-bold uppercase tracking-widest text-text-muted">
                         <th className="pb-3">Bill No</th>
@@ -1055,7 +1055,7 @@ export default function ReportsPage() {
             ) : (
               <>
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full min-w-[600px] text-left border-collapse">
                     <thead>
                       <tr className="border-b border-gray-50 text-[10px] font-bold uppercase tracking-widest text-text-muted">
                         <th className="pb-3 pl-2">Bill No</th>
@@ -1165,7 +1165,7 @@ export default function ReportsPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full min-w-[600px] text-left border-collapse">
                   <thead>
                     <tr className="border-b border-gray-50 text-[10px] font-bold uppercase tracking-widest text-text-muted">
                       <th className="pb-3 pl-2">Category</th>
@@ -1205,7 +1205,7 @@ export default function ReportsPage() {
             ) : (
               <>
                 <div className="overflow-x-auto border border-slate-100 rounded-2xl shadow-inner bg-slate-50/20">
-                  <table className="w-full text-left border-collapse text-xs font-sans">
+                  <table className="w-full min-w-[600px] text-left border-collapse text-xs font-sans">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         <th className="py-3 px-4">Product Name</th>
@@ -1291,7 +1291,7 @@ export default function ReportsPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full min-w-[600px] text-left border-collapse">
                   <thead>
                     <tr className="border-b border-gray-50 text-[10px] font-bold uppercase tracking-widest text-text-muted">
                       <th className="pb-3 pl-2">Customer Profile Name</th>
@@ -1706,7 +1706,7 @@ export default function ReportsPage() {
             <p className="text-sm font-bold text-gray-800 mt-2 uppercase tracking-wider bg-gray-100 inline-block px-3 py-1 rounded-md">Period: {getPeriodDisplayString()}</p>
             <p className="text-sm font-bold text-gray-600 mt-2">{store?.location || ''}</p>
           </div>
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full min-w-[600px] text-left border-collapse text-xs">
             <thead>
               <tr className="border-b-2 border-gray-900 font-bold uppercase text-gray-800">
                 <th className="py-3 px-2">Date</th>

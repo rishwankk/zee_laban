@@ -155,7 +155,7 @@ export default function StoreDashboard() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full min-w-[600px] text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-50 text-[10px] font-bold uppercase tracking-widest text-text-muted">
                     <th className="pb-3">Bill Number</th>

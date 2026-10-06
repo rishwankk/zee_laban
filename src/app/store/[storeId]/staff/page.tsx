@@ -504,7 +504,7 @@ export default function StaffPage() {
               </div>
             ) : (
               <div className="overflow-x-auto scrollbar-thin">
-                <table className="w-full text-left border-collapse whitespace-nowrap">
+                <table className="w-full min-w-[600px] text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr className="border-b-2 border-gray-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                       <th className="pb-4 pl-2">Name</th>
@@ -585,7 +585,7 @@ export default function StaffPage() {
                 </div>
               ) : (
                 <div className="overflow-x-auto scrollbar-thin">
-                  <table className="w-full text-left border-collapse whitespace-nowrap">
+                  <table className="w-full min-w-[600px] text-left border-collapse whitespace-nowrap">
                     <thead>
                       <tr className="border-b-2 border-gray-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                         <th className="pb-4 pl-2">Employee</th>
@@ -654,7 +654,7 @@ export default function StaffPage() {
               </div>
             ) : (
               <div className="overflow-x-auto scrollbar-thin">
-                <table className="w-full text-left border-collapse whitespace-nowrap">
+                <table className="w-full min-w-[600px] text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr className="border-b-2 border-gray-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                       <th className="pb-4 pl-2">Staff Member</th>

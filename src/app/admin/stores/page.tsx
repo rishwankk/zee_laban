@@ -647,8 +647,8 @@ export default function AdminStoresPage() {
                   <p className="text-[10px] text-text-muted/80 mt-1 max-w-[280px]">As soon as checkout registers are finalized on counter terminals, their sales logs will populate here.</p>
                 </div>
               ) : (
-                <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-inner bg-slate-50/20">
-                  <table className="w-full text-left border-collapse text-xs font-sans">
+                <div className="border border-slate-100 rounded-2xl overflow-x-auto shadow-inner bg-slate-50/20">
+                  <table className="w-full min-w-[600px] min-w-[600px] min-w-[500px] text-left border-collapse text-xs font-sans">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         <th className="py-3 px-4">Dessert Item Name</th>

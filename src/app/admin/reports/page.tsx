@@ -494,7 +494,7 @@ export default function AdminReportsPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
+              <table className="w-full min-w-[600px] min-w-[600px] text-left border-collapse">
                 <thead>
                   <tr className="border-b border-gray-50 text-[10px] font-bold uppercase tracking-widest text-text-muted">
                     <th className="pb-3 pl-2">Store Outlet</th>
@@ -626,7 +626,7 @@ export default function AdminReportsPage() {
             ) : (
               <>
                 <div className="overflow-x-auto border border-slate-100 rounded-2xl shadow-inner bg-slate-50/20">
-                  <table className="w-full text-left border-collapse text-xs font-sans">
+                  <table className="w-full min-w-[600px] min-w-[600px] text-left border-collapse text-xs font-sans">
                     <thead>
                       <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-bold uppercase tracking-wider text-slate-400">
                         <th className="py-3 px-4">Product Name</th>
@@ -707,7 +707,7 @@ export default function AdminReportsPage() {
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
+                <table className="w-full min-w-[600px] min-w-[600px] text-left border-collapse">
                   <thead>
                     <tr className="border-b border-gray-50 text-[10px] font-bold uppercase tracking-widest text-text-muted">
                       <th className="pb-3 pl-2">Customer Name</th>
@@ -747,7 +747,7 @@ export default function AdminReportsPage() {
             <p className="text-sm font-semibold text-gray-500 mt-1">Generated on: {new Date().toLocaleString()}</p>
             <p className="text-sm font-bold text-gray-800 mt-1 uppercase tracking-wider bg-gray-100 inline-block px-3 py-1 rounded-md">Period: {getPeriodDisplayString()}</p>
           </div>
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full min-w-[600px] min-w-[600px] text-left border-collapse text-xs">
             <thead>
               <tr className="border-b-2 border-gray-900 font-bold uppercase text-gray-800">
                 <th className="py-3 px-2">Date</th>

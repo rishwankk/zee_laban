@@ -38,28 +38,28 @@ export default function TopBar() {
       <div className="flex items-center space-x-3">
         {store ? (
           <>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-light text-primary">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
               <MapPin className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="font-display font-extrabold text-base text-text-primary leading-tight">
+            <div className="min-w-0">
+              <h1 className="font-display font-extrabold text-base text-text-primary leading-tight truncate">
                 {store.name}
               </h1>
-              <p className="text-[10px] font-bold text-text-muted mt-0.5 flex items-center">
+              <p className="text-[10px] font-bold text-text-muted mt-0.5 flex items-center truncate">
                 <span>{store.location}</span>
               </p>
             </div>
           </>
         ) : (
           <>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-50 text-primary">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-primary">
               <Sparkles className="h-5 w-5" />
             </div>
-            <div>
-              <h1 className="font-display font-extrabold text-base text-text-primary leading-tight">
+            <div className="min-w-0">
+              <h1 className="font-display font-extrabold text-base text-text-primary leading-tight truncate">
                 Zee Laban
               </h1>
-              <p className="text-[10px] font-bold text-text-muted mt-0.5">
+              <p className="text-[10px] font-bold text-text-muted mt-0.5 truncate">
                 Consolidated Main HQ Panel
               </p>
             </div>
@@ -83,11 +83,11 @@ export default function TopBar() {
         </div>
 
         {/* User Card */}
-        <div className="flex items-center space-x-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white font-display font-bold text-sm shadow-md shadow-primary/10">
+        <div className="flex items-center space-x-3 shrink-0">
+          <div className="flex shrink-0 h-10 w-10 items-center justify-center rounded-xl bg-primary text-white font-display font-bold text-sm shadow-md shadow-primary/10">
             {user.role === 'admin' ? 'AD' : user.name.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()}
           </div>
-          <div className="text-left">
+          <div className="text-left hidden sm:block">
             {user.role === 'admin' ? (
               <div className="text-sm font-bold text-text-primary leading-tight">Admin Account</div>
             ) : (
