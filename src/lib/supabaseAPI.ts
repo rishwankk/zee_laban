@@ -184,8 +184,13 @@ export const supabaseAPI = {
   },
 
   deleteProduct: async (id: string): Promise<void> => {
+    // 1. Mark the product as inactive in the master catalog
     const { error } = await supabase!.from('products').update({ is_active: false }).eq('id', id);
     if (error) throw new Error(error.message);
+
+    // 2. Delete the stock records for this product across all stores
+    // This fully removes it from the store level (stock control)
+    await supabase!.from('stock').delete().eq('product_id', id);
   },
 
   // ---------------------------------------------------------
@@ -198,11 +203,13 @@ export const supabaseAPI = {
       .eq('store_id', storeId);
     if (error) throw new Error(error.message);
 
-    // Fallback if joined product is an array instead of single object
-    return (data as any[]).map(s => ({
-      ...s,
-      product: Array.isArray(s.product) ? s.product[0] : s.product
-    }));
+    // Fallback if joined product is an array instead of single object, and filter out inactive products
+    return (data as any[])
+      .map(s => ({
+        ...s,
+        product: Array.isArray(s.product) ? s.product[0] : s.product
+      }))
+      .filter(s => s.product && s.product.is_active !== false);
   },
 
   updateStockQuantity: async (
