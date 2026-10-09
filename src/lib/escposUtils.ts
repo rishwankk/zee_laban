@@ -1,7 +1,10 @@
 export async function getEscPosImage(imageUrl: string, maxWidth = 240): Promise<Uint8Array> {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'Anonymous';
+    // Only set crossOrigin if fetching from an external domain
+    if (imageUrl.startsWith('http') && !imageUrl.includes(window.location.host)) {
+      img.crossOrigin = 'Anonymous';
+    }
     img.onload = () => {
       let width = img.width;
       let height = img.height;

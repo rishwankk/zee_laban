@@ -624,7 +624,7 @@ export default function ReportsPage() {
       let logoBytes: any = new Uint8Array(0);
       try {
         const { getEscPosImage } = await import('@/lib/escposUtils');
-        logoBytes = await getEscPosImage(`${window.location.origin}/logo.png`, 180);
+        logoBytes = await getEscPosImage(`/logo.png`, 180);
       } catch (e) {
         // gracefully skip logo if escposUtils import fails
       }

@@ -356,7 +356,7 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
 
         let logoBytes: Uint8Array = new Uint8Array(0);
         try {
-          logoBytes = await getEscPosImage(`${window.location.origin}/logo.png`, 180);
+          logoBytes = await getEscPosImage(`/logo.png`, 180);
         } catch (e) {
           console.error("Logo fetch failed", e);
         }
