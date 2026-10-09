@@ -275,7 +275,7 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
     const state = get();
     if (state.printerType === 'Bluetooth' && state.btCharacteristic) {
       try {
-        const chunkSize = 200; // Safe chunk size for BLE
+        const chunkSize = 100; // Smaller chunk size for better BLE stability
         for (let i = 0; i < data.length; i += chunkSize) {
           const chunk = data.slice(i, i + chunkSize);
           if (typeof state.btCharacteristic.writeValueWithoutResponse === 'function') {
@@ -283,6 +283,8 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
           } else {
             await state.btCharacteristic.writeValue(chunk);
           }
+          // Critical delay to prevent thermal printer buffer overflow
+          await new Promise(resolve => setTimeout(resolve, 40));
         }
         return true;
       } catch (e) {
