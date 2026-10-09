@@ -278,7 +278,11 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
         const chunkSize = 200; // Safe chunk size for BLE
         for (let i = 0; i < data.length; i += chunkSize) {
           const chunk = data.slice(i, i + chunkSize);
-          await state.btCharacteristic.writeValue(chunk);
+          if (typeof state.btCharacteristic.writeValueWithoutResponse === 'function') {
+            await state.btCharacteristic.writeValueWithoutResponse(chunk);
+          } else {
+            await state.btCharacteristic.writeValue(chunk);
+          }
         }
         return true;
       } catch (e) {
@@ -313,7 +317,8 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
       try {
         if (rawBuffers && rawBuffers.length > 0) {
           for (const buf of rawBuffers) {
-            await get().sendRawData(buf);
+            const success = await get().sendRawData(buf);
+            if (!success) throw new Error("Hardware write failed");
             await new Promise(res => setTimeout(res, 500));
           }
           onComplete();
@@ -330,7 +335,8 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
             finalData.set(text, init.length);
             finalData.set(cut, init.length + text.length);
 
-            await get().sendRawData(finalData);
+            const success = await get().sendRawData(finalData);
+            if (!success) throw new Error("Hardware write failed");
             
             // Small delay between cuts to allow printer to process
             await new Promise(res => setTimeout(res, 500));
