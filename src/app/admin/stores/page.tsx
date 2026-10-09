@@ -50,6 +50,11 @@ export default function AdminStoresPage() {
   const [storeSalesItems, setStoreSalesItems] = useState<{ name: string; category: string; quantity: number; revenue: number }[]>([]);
   const [storeSalesLoading, setStoreSalesLoading] = useState(false);
 
+  // Delete Modal States
+  const [storeToDelete, setStoreToDelete] = useState<Store | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const handleOpenStoreSales = async (st: Store) => {
     setSelectedStoreForSales(st);
     setStoreSalesLoading(true);
@@ -197,13 +202,34 @@ export default function AdminStoresPage() {
     }
   };
 
-  const handleDeactivateStore = async (id: string) => {
-    if (!confirm("Are you sure you want to suspend this store outlet? This locks counter terminals.")) return;
+  const handleToggleStoreStatus = async (st: Store) => {
+    const action = st.is_active !== false ? 'suspend' : 'resume';
+    if (!confirm(`Are you sure you want to ${action} this store outlet?`)) return;
     try {
-      await api.updateStore(id, { is_active: false });
+      await api.toggleStoreStatus(st.id, st.is_active === false);
       await loadData();
     } catch (err) {
-      console.error("Failed to suspend store", err);
+      console.error(`Failed to ${action} store`, err);
+    }
+  };
+
+  const handleDeleteStore = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!storeToDelete || deleteConfirmText !== 'DELETE') return;
+    
+    setIsDeleting(true);
+    try {
+      await api.deleteStore(storeToDelete.id);
+      setStoreToDelete(null);
+      setDeleteConfirmText('');
+      setNotification("Store and all related data completely deleted! 🗑️");
+      setTimeout(() => setNotification(null), 3000);
+      await loadData();
+    } catch (err: any) {
+      console.error("Failed to delete store", err);
+      alert(err.message || "Failed to delete store.");
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -255,9 +281,15 @@ export default function AdminStoresPage() {
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary-light text-primary group-hover:bg-primary group-hover:text-white transition-colors">
                   <Building className="h-5 w-5" />
                 </div>
-                <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-800">
-                  Active Outlet
-                </span>
+                {st.is_active !== false ? (
+                  <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-emerald-800">
+                    Active Outlet
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-amber-800">
+                    Suspended
+                  </span>
+                )}
               </div>
 
               <h3 className="font-display text-base font-black text-text-primary leading-tight group-hover:text-primary transition-colors mb-4">
@@ -298,13 +330,19 @@ export default function AdminStoresPage() {
                 className="flex-1 flex items-center justify-center space-x-1.5 rounded-xl bg-sky-50 hover:bg-primary py-2.5 text-xs font-bold text-primary hover:text-white transition-colors cursor-pointer text-center"
               >
                 <Edit className="h-3.5 w-3.5" />
-                <span>Edit Store</span>
+                <span>Edit</span>
               </button>
               <button
-                onClick={(e) => { e.stopPropagation(); handleDeactivateStore(st.id); }}
-                className="rounded-xl bg-red-50 hover:bg-danger px-3 py-2.5 text-xs font-bold text-danger hover:text-white transition-colors cursor-pointer text-center animate-fade-in"
+                onClick={(e) => { e.stopPropagation(); handleToggleStoreStatus(st); }}
+                className={`flex-1 rounded-xl px-2 py-2.5 text-xs font-bold transition-colors cursor-pointer text-center ${st.is_active !== false ? 'bg-amber-50 hover:bg-warning text-warning hover:text-white' : 'bg-emerald-50 hover:bg-emerald-500 text-emerald-600 hover:text-white'}`}
               >
-                Suspend
+                {st.is_active !== false ? 'Suspend' : 'Resume'}
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setStoreToDelete(st); }}
+                className="flex-1 rounded-xl bg-red-50 hover:bg-danger px-2 py-2.5 text-xs font-bold text-danger hover:text-white transition-colors cursor-pointer text-center"
+              >
+                Delete
               </button>
             </div>
           </div>
@@ -685,6 +723,77 @@ export default function AdminStoresPage() {
                 Close Ledger
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL: DELETE STORE CONFIRMATION */}
+      {/* ======================================================== */}
+      {storeToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl animate-scale-up border border-red-100">
+            <div className="flex items-center space-x-3 mb-4 border-b border-red-50 pb-4">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-50 text-danger">
+                <X className="h-6 w-6 stroke-[2.5px]" />
+              </div>
+              <div>
+                <h3 className="font-display text-base font-black text-danger uppercase tracking-wide">
+                  DANGER: Delete Store
+                </h3>
+                <p className="text-[10px] font-bold text-slate-500">
+                  {storeToDelete.name}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-red-50/50 rounded-2xl p-4 border border-red-100 mb-6 font-semibold text-xs text-danger/80 leading-relaxed">
+              WARNING: This action is completely irreversible. Deleting this store will permanently wipe all of its associated data including:
+              <ul className="list-disc pl-4 mt-2 space-y-1 text-[11px] font-bold text-danger">
+                <li>All Sales & Bills</li>
+                <li>Inventory Stock</li>
+                <li>Staff Logins & Shifts</li>
+                <li>Store Login Account</li>
+              </ul>
+            </div>
+
+            <form onSubmit={handleDeleteStore}>
+              <div className="mb-6">
+                <label className="block text-[10px] font-black uppercase tracking-wider text-slate-500 mb-2">
+                  Type <span className="text-danger">DELETE</span> to confirm
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={deleteConfirmText}
+                  onChange={(e) => setDeleteConfirmText(e.target.value)}
+                  placeholder="DELETE"
+                  className="w-full rounded-xl border border-red-200 bg-white px-4 py-3 text-sm font-black text-danger outline-none focus:border-danger focus:ring-4 focus:ring-red-50 transition-all text-center placeholder:text-red-200"
+                />
+              </div>
+
+              <div className="flex space-x-3">
+                <button
+                  type="button"
+                  disabled={isDeleting}
+                  onClick={() => { setStoreToDelete(null); setDeleteConfirmText(''); }}
+                  className="flex-1 rounded-xl bg-slate-100 hover:bg-slate-200 py-3 text-xs font-bold text-slate-600 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={deleteConfirmText !== 'DELETE' || isDeleting}
+                  className="flex-1 rounded-xl bg-danger hover:bg-red-700 disabled:opacity-50 disabled:hover:bg-danger py-3 text-xs font-bold text-white shadow-lg shadow-danger/20 transition-all active:scale-95 flex items-center justify-center"
+                >
+                  {isDeleting ? (
+                    <span className="h-4 w-4 rounded-full border-2 border-white border-t-transparent animate-spin"></span>
+                  ) : (
+                    "Permanently Delete"
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

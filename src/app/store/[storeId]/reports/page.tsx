@@ -96,9 +96,9 @@ export default function ReportsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  const loadData = async () => {
+  const loadData = async (silent = false) => {
     if (!store) return;
-    setLoading(true);
+    if (!silent) setLoading(true);
     try {
       const bList = await api.getBillsByStore(store.id);
       setBills(bList);
@@ -121,6 +121,33 @@ export default function ReportsPage() {
 
   useEffect(() => {
     loadData();
+
+    if (!store) return;
+
+    const handleSync = () => loadData(true);
+
+    // 1. Listen for cross-tab sync
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel('zee_laban_sync');
+      bc.onmessage = (event) => {
+        if (event.data === 'REFRESH_REPORTS') {
+          handleSync();
+        }
+      };
+    } catch (e) {}
+
+    // 2. Listen to local window events
+    window.addEventListener('lbn_realtime_bill_created', handleSync);
+    
+    // 3. Listen to window focus (re-syncs if coming back from background)
+    window.addEventListener('focus', handleSync);
+
+    return () => {
+      if (bc) bc.close();
+      window.removeEventListener('lbn_realtime_bill_created', handleSync);
+      window.removeEventListener('focus', handleSync);
+    };
   }, [store]);
 
   useEffect(() => {

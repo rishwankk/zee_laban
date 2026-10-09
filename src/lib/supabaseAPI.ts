@@ -92,8 +92,37 @@ export const supabaseAPI = {
     return result;
   },
 
+  toggleStoreStatus: async (id: string, is_active: boolean): Promise<void> => {
+    const { error } = await supabase!.from('stores').update({ is_active }).eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   deleteStore: async (id: string): Promise<void> => {
-    const { error } = await supabase!.from('stores').update({ is_active: false }).eq('id', id);
+    // 1. Delete bills and bill items
+    const { data: bills } = await supabase!.from('bills').select('id').eq('store_id', id);
+    if (bills && bills.length > 0) {
+      const billIds = bills.map(b => b.id);
+      // Delete in chunks if there are too many? Supabase supports up to 1000 in 'in' filter, but it's fine for now
+      await supabase!.from('bill_items').delete().in('bill_id', billIds);
+      await supabase!.from('bills').delete().eq('store_id', id);
+    }
+    
+    // 2. Delete stock logs and stock
+    await supabase!.from('stock_logs').delete().eq('store_id', id);
+    await supabase!.from('stock').delete().eq('store_id', id);
+
+    // 3. Delete shift logs & staff
+    await supabase!.from('shift_logs').delete().eq('store_id', id);
+    await supabase!.from('staff').delete().eq('store_id', id);
+
+    // 4. Delete users assigned to this store
+    await supabase!.from('users').delete().eq('store_id', id);
+
+    // 5. Delete admin inventory logs related to this store
+    await supabase!.from('admin_inventory_logs').delete().eq('store_id', id);
+
+    // 6. Finally delete the store
+    const { error } = await supabase!.from('stores').delete().eq('id', id);
     if (error) throw new Error(error.message);
   },
   
@@ -485,18 +514,15 @@ export const supabaseAPI = {
   getBillsByStore: async (storeId: string): Promise<(Bill & { cashierName: string })[]> => {
     const { data, error } = await supabase!
       .from('bills')
-      .select(`*, cashier:users(name)`)
+      .select(`*`)
       .eq('store_id', storeId)
       .order('created_at', { ascending: false });
     if (error) throw new Error(error.message);
 
     return (data as any[]).map(b => {
-      const cashierName = b.cashier ? (Array.isArray(b.cashier) ? b.cashier[0].name : b.cashier.name) : "Store Desk";
-      // Remove the nested cashier object to match local API return type
-      const { cashier, ...billRest } = b;
       return {
-        ...billRest,
-        cashierName
+        ...b,
+        cashierName: "Store Desk"
       };
     });
   },
@@ -584,6 +610,9 @@ export const supabaseAPI = {
 
     if (isClient()) {
       window.dispatchEvent(new CustomEvent('lbn_realtime_bill_created', { detail: { billId: newBill.id } }));
+      try {
+        new BroadcastChannel('zee_laban_sync').postMessage('REFRESH_REPORTS');
+      } catch (e) {}
     }
 
     return newBill;
