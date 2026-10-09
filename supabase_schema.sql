@@ -143,6 +143,28 @@ CREATE TABLE IF NOT EXISTS public.bill_items (
     total_price NUMERIC NOT NULL
 );
 
+-- 13. Admin Inventory Items
+CREATE TABLE IF NOT EXISTS public.admin_inventory_items (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    quantity NUMERIC NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- 14. Admin Inventory Logs (Distribution History)
+CREATE TABLE IF NOT EXISTS public.admin_inventory_logs (
+    id TEXT PRIMARY KEY,
+    item_id TEXT REFERENCES public.admin_inventory_items(id),
+    store_id TEXT REFERENCES public.stores(id),
+    quantity_given NUMERIC NOT NULL,
+    given_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- Disable Row Level Security for these tables to allow anonymous key access
+ALTER TABLE public.admin_inventory_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.admin_inventory_logs DISABLE ROW LEVEL SECURITY;
+
 -- Seed Initial Admin User & Settings
 INSERT INTO public.system_settings (key, value) VALUES 
 ('admin_email', 'admin@laban.com'),

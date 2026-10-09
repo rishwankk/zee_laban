@@ -10,7 +10,9 @@ import {
   Stock,
   StockLog,
   Bill,
-  BillItem
+  BillItem,
+  AdminInventoryItem,
+  AdminInventoryLog
 } from './db';
 
 const isClient = () => typeof window !== 'undefined';
@@ -837,5 +839,86 @@ export const supabaseAPI = {
     }
 
     return null;
+  },
+
+  // ---------------------------------------------------------
+  // ADMIN INVENTORY (Master Supplies)
+  // ---------------------------------------------------------
+  getAdminInventory: async (): Promise<AdminInventoryItem[]> => {
+    const { data, error } = await supabase!.from('admin_inventory_items').select('*').order('created_at', { ascending: false });
+    if (error) throw new Error(error.message);
+    return data as AdminInventoryItem[];
+  },
+
+  addAdminInventoryItem: async (name: string, quantity: number): Promise<AdminInventoryItem> => {
+    const { data, error } = await supabase!.from('admin_inventory_items').insert({
+      id: `inv-${Date.now()}`,
+      name,
+      quantity,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }).select().single();
+    if (error) throw new Error(error.message);
+    return data as AdminInventoryItem;
+  },
+
+  updateAdminInventoryItem: async (id: string, quantity: number): Promise<AdminInventoryItem> => {
+    const { data, error } = await supabase!.from('admin_inventory_items').update({
+      quantity,
+      updated_at: new Date().toISOString()
+    }).eq('id', id).select().single();
+    if (error) throw new Error(error.message);
+    return data as AdminInventoryItem;
+  },
+
+  deleteAdminInventoryItem: async (id: string): Promise<void> => {
+    const { error } = await supabase!.from('admin_inventory_items').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
+  distributeInventory: async (itemId: string, storeId: string, quantityToGive: number): Promise<void> => {
+    // 1. Get current item stock
+    const { data: item, error: getErr } = await supabase!.from('admin_inventory_items').select('*').eq('id', itemId).single();
+    if (getErr) throw new Error('Item not found');
+    
+    if (item.quantity < quantityToGive) {
+      throw new Error(`Not enough stock available. Current balance: ${item.quantity}`);
+    }
+
+    // 2. Deduct from master stock
+    const { error: upErr } = await supabase!.from('admin_inventory_items').update({
+      quantity: item.quantity - quantityToGive,
+      updated_at: new Date().toISOString()
+    }).eq('id', itemId);
+    if (upErr) throw new Error(upErr.message);
+
+    // 3. Log the distribution
+    const { error: logErr } = await supabase!.from('admin_inventory_logs').insert({
+      id: `invlog-${Date.now()}`,
+      item_id: itemId,
+      store_id: storeId,
+      quantity_given: quantityToGive,
+      given_at: new Date().toISOString()
+    });
+    if (logErr) throw new Error(logErr.message);
+  },
+
+  getAdminInventoryLogs: async (): Promise<(AdminInventoryLog & { item: AdminInventoryItem, store: Store })[]> => {
+    const { data, error } = await supabase!
+      .from('admin_inventory_logs')
+      .select(`
+        *,
+        item:admin_inventory_items(*),
+        store:stores(*)
+      `)
+      .order('given_at', { ascending: false });
+    
+    if (error) throw new Error(error.message);
+
+    return (data as any[]).map(log => ({
+      ...log,
+      item: Array.isArray(log.item) ? log.item[0] : log.item,
+      store: Array.isArray(log.store) ? log.store[0] : log.store
+    }));
   }
 };

@@ -41,6 +41,7 @@ export default function Sidebar({ storeId }: SidebarProps) {
     { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Store Outlets', href: '/admin/stores', icon: Store },
     { name: 'Master Menu', href: '/admin/menu', icon: MenuIcon },
+    { name: 'Inventory & Supplies', href: '/admin/inventory', icon: ClipboardList },
     { name: 'Global Reports', href: '/admin/reports', icon: BarChart3 },
     { name: 'System Settings', href: '/admin/settings', icon: SettingsIcon },
   ];

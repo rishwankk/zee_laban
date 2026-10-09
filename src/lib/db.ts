@@ -135,3 +135,19 @@ export interface CustomerProfile {
   spent: number;
 }
 
+export interface AdminInventoryItem {
+  id: string;
+  name: string;
+  quantity: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminInventoryLog {
+  id: string;
+  item_id: string;
+  store_id: string;
+  quantity_given: number;
+  given_at: string;
+}
+
