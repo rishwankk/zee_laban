@@ -58,10 +58,19 @@ export default function StoreSettingsPage() {
   const [passwordNotification, setPasswordNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [isChangingPassword, setIsChangingPassword] = useState(false);
 
+  // Discount Offer Settings
+  const [discountEnabled, setDiscountEnabled] = useState(false);
+  const [discountName, setDiscountName] = useState('');
+  const [discountPercentage, setDiscountPercentage] = useState('');
+  const [discountNotification, setDiscountNotification] = useState<string | null>(null);
+
   // Load values on mount
   useEffect(() => {
     if (store) {
       setUpiIdInput(store.upi_id || '');
+      setDiscountEnabled(store.discount_enabled || false);
+      setDiscountName(store.discount_name || '');
+      setDiscountPercentage(store.discount_percentage ? store.discount_percentage.toString() : '');
     }
   }, [store]);
 
@@ -152,17 +161,50 @@ export default function StoreSettingsPage() {
     }
   };
 
+  // Handle discount offer update
+  const handleUpdateDiscount = async (e?: React.FormEvent, deleteOffer: boolean = false) => {
+    if (e) e.preventDefault();
+    if (!store) return;
+
+    try {
+      const updates = deleteOffer ? {
+        discount_enabled: false,
+        discount_name: null,
+        discount_percentage: null
+      } : {
+        discount_enabled: discountEnabled,
+        discount_name: discountName.trim(),
+        discount_percentage: parseFloat(discountPercentage) || 0
+      };
+
+      await api.updateStore(store.id, updates);
+      await changeStore(store.id); // sync context
+
+      if (deleteOffer) {
+        setDiscountEnabled(false);
+        setDiscountName('');
+        setDiscountPercentage('');
+        setDiscountNotification("Store offer deleted successfully! 🗑️");
+      } else {
+        setDiscountNotification("Store offer updated successfully! 🎉");
+      }
+      setTimeout(() => setDiscountNotification(null), 3000);
+    } catch (err) {
+      console.error("Failed to save discount settings", err);
+    }
+  };
+
   return (
     <div className="space-y-8 select-none animate-fade-in relative max-w-5xl">
 
       {/* Dynamic Toast Alerts */}
-      {(printerNotification || upiNotification) && (
+      {(printerNotification || upiNotification || discountNotification) && (
         <div className="fixed top-24 right-4 sm:right-8 z-40 bg-primary text-white rounded-2xl p-4 shadow-lg border border-blue-50/15 flex items-center space-x-3 select-none animate-slide-down max-w-[90vw]">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10 text-white shrink-0">
             <CheckCircle className="h-5 w-5 stroke-[2.5px]" />
           </div>
           <span className="text-xs font-black tracking-wide pr-2">
-            {printerNotification || upiNotification}
+            {printerNotification || upiNotification || discountNotification}
           </span>
         </div>
       )}
@@ -510,6 +552,111 @@ export default function StoreSettingsPage() {
           )}
 
         </div>
+
+      </div>
+
+      {/* ─── STORE DISCOUNT OFFERS ─── */}
+      <div className="rounded-3xl bg-white border border-slate-100 p-5 sm:p-6 shadow-sm flex flex-col space-y-6 mt-6">
+        <div className="flex items-center space-x-2.5">
+          <Sparkles className="h-5 w-5 text-primary" />
+          <h3 className="font-display text-sm font-black text-text-primary">
+            Store Promotions & Discounts
+          </h3>
+        </div>
+
+        <p className="text-[10px] sm:text-xs font-semibold text-text-muted leading-relaxed">
+          Configure a store-wide percentage discount that automatically applies to all bills.
+        </p>
+
+        <form onSubmit={(e) => handleUpdateDiscount(e, false)} className="space-y-4 pt-2">
+
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-2">
+                Discount Name
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  required={discountEnabled}
+                  value={discountName}
+                  onChange={(e) => setDiscountName(e.target.value)}
+                  placeholder="e.g. Launching Offer"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/5 font-bold text-slate-800 transition-all"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-2">
+                Percentage
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  required={discountEnabled}
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={discountPercentage}
+                  onChange={(e) => setDiscountPercentage(e.target.value)}
+                  placeholder="10"
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 pl-4 pr-10 py-3 text-xs outline-none focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/5 font-mono font-bold text-slate-800 transition-all"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400">
+                  %
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row items-center gap-3 pt-5 mt-2 border-t border-slate-100">
+            <div className="flex-1 flex flex-col sm:flex-row gap-3 w-full">
+              <button
+                type="submit"
+                onClick={() => setDiscountEnabled(true)}
+                className="flex-1 w-full rounded-xl bg-primary hover:bg-primary-dark py-3.5 text-xs font-black text-white shadow-lg shadow-primary/20 transition-all active:scale-[0.98] cursor-pointer"
+              >
+                Save & Enable Offer
+              </button>
+              
+              {discountEnabled ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    setDiscountEnabled(false);
+                    setTimeout(() => handleUpdateDiscount(undefined, false), 0);
+                  }}
+                  className="flex-1 w-full rounded-xl bg-amber-500 hover:bg-amber-600 py-3.5 text-xs font-black text-white shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98] cursor-pointer"
+                >
+                  Pause Offer
+                </button>
+              ) : (
+                (store?.discount_name || discountName) && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      setDiscountEnabled(true);
+                      setTimeout(() => handleUpdateDiscount(undefined, false), 0);
+                    }}
+                    className="flex-1 w-full rounded-xl bg-emerald-500 hover:bg-emerald-600 py-3.5 text-xs font-black text-white shadow-lg shadow-emerald-500/20 transition-all active:scale-[0.98] cursor-pointer"
+                  >
+                    Resume Offer
+                  </button>
+                )
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleUpdateDiscount(undefined, true)}
+              className="w-full sm:w-auto px-6 rounded-xl bg-white border-2 border-red-100 text-red-500 hover:bg-red-50 hover:border-red-200 py-3.5 text-xs font-black shadow-sm transition-all active:scale-[0.98] cursor-pointer"
+            >
+              Delete Offer
+            </button>
+          </div>
+
+        </form>
 
       </div>
 

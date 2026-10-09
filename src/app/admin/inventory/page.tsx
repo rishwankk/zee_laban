@@ -5,7 +5,7 @@ import { api } from '@/lib/supabase';
 import { AdminInventoryItem, AdminInventoryLog, Store } from '@/lib/db';
 import {
   ClipboardList, Plus, History, Package,
-  Building, CheckCircle, AlertTriangle, Send, X, Edit2, Trash2
+  Building, CheckCircle, AlertTriangle, Send, X, Edit2, Trash2, Filter
 } from 'lucide-react';
 
 export default function AdminInventoryPage() {
@@ -18,13 +18,20 @@ export default function AdminInventoryPage() {
   const [showAddItem, setShowAddItem] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [newItemQty, setNewItemQty] = useState('');
+  const [newItemPrice, setNewItemPrice] = useState('');
   
   const [editItem, setEditItem] = useState<AdminInventoryItem | null>(null);
   const [editQty, setEditQty] = useState('');
+  const [editPrice, setEditPrice] = useState('');
   
   const [allocateItem, setAllocateItem] = useState<AdminInventoryItem | null>(null);
   const [allocateStore, setAllocateStore] = useState('');
   const [allocateQty, setAllocateQty] = useState('');
+  
+  // Filters
+  const [filterStore, setFilterStore] = useState<string>('all');
+  const [filterStartDate, setFilterStartDate] = useState<string>('');
+  const [filterEndDate, setFilterEndDate] = useState<string>('');
   
   const [notification, setNotification] = useState<{message: string, isError: boolean} | null>(null);
 
@@ -48,10 +55,11 @@ export default function AdminInventoryPage() {
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await api.addAdminInventoryItem(newItemName, parseInt(newItemQty) || 0);
+      await api.addAdminInventoryItem(newItemName, parseInt(newItemQty) || 0, parseFloat(newItemPrice) || 0);
       setShowAddItem(false);
       setNewItemName('');
       setNewItemQty('');
+      setNewItemPrice('');
       notify("Item added successfully");
       loadData();
     } catch (err: any) {
@@ -63,9 +71,9 @@ export default function AdminInventoryPage() {
     e.preventDefault();
     if (!editItem) return;
     try {
-      await api.updateAdminInventoryItem(editItem.id, parseInt(editQty) || 0);
+      await api.updateAdminInventoryItem(editItem.id, parseInt(editQty) || 0, parseFloat(editPrice) || 0);
       setEditItem(null);
-      notify("Item quantity updated");
+      notify("Item updated");
       loadData();
     } catch (err: any) {
       notify(err.message, true);
@@ -98,6 +106,27 @@ export default function AdminInventoryPage() {
       notify(err.message, true); // This will show the "Not enough stock" error
     }
   };
+
+  const filteredLogs = logs.filter(log => {
+    if (filterStore !== 'all' && log.store_id !== filterStore) return false;
+    
+    if (filterStartDate) {
+      const logDate = new Date(log.given_at).setHours(0,0,0,0);
+      const startDate = new Date(filterStartDate).setHours(0,0,0,0);
+      if (logDate < startDate) return false;
+    }
+    
+    if (filterEndDate) {
+      const logDate = new Date(log.given_at).setHours(0,0,0,0);
+      const endDate = new Date(filterEndDate).setHours(0,0,0,0);
+      if (logDate > endDate) return false;
+    }
+
+    return true;
+  });
+
+  const totalFilteredQuantity = filteredLogs.reduce((sum, log) => sum + log.quantity_given, 0);
+  const totalFilteredValue = filteredLogs.reduce((sum, log) => sum + (log.total_value || 0), 0);
 
   return (
     <div className="space-y-8 select-none animate-fade-in relative">
@@ -172,7 +201,9 @@ export default function AdminInventoryPage() {
                   <div className="flex justify-between items-start mb-4">
                     <div>
                       <h3 className="font-black text-slate-800 text-lg">{item.name}</h3>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">Available Stock</p>
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-1">
+                        Stock • ₹{item.unit_price?.toFixed(2) || '0.00'} / unit
+                      </p>
                     </div>
                     <div className="bg-white px-3 py-1.5 rounded-xl border border-slate-200">
                       <span className="font-mono text-xl font-black text-primary-dark">{item.quantity}</span>
@@ -188,7 +219,7 @@ export default function AdminInventoryPage() {
                       <span>Give to Store</span>
                     </button>
                     <button
-                      onClick={() => { setEditItem(item); setEditQty(item.quantity.toString()); }}
+                      onClick={() => { setEditItem(item); setEditQty(item.quantity.toString()); setEditPrice(item.unit_price?.toString() || '0'); }}
                       className="p-2 bg-white border border-slate-200 text-slate-500 rounded-xl hover:text-blue-600 hover:border-blue-200 transition-colors cursor-pointer"
                     >
                       <Edit2 className="h-4 w-4" />
@@ -208,46 +239,116 @@ export default function AdminInventoryPage() {
       )}
 
       {activeTab === 'history' && (
-        <div className="rounded-3xl bg-white border border-gray-100 p-6 shadow-sm overflow-hidden">
-          {logs.length === 0 ? (
-            <div className="py-12 text-center text-text-muted text-sm font-medium">
-              No distribution history yet.
+        <div className="space-y-4">
+          {/* Summary and Filters */}
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            
+            {/* Filters */}
+            <div className="xl:col-span-2 rounded-3xl bg-white border border-gray-100 p-6 shadow-sm flex flex-col justify-center">
+              <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-800 mb-4 flex items-center gap-2">
+                <Filter className="h-4 w-4 text-primary" /> 
+                <span>Filter Distribution Logs</span>
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-2">Store</label>
+                  <select
+                    value={filterStore}
+                    onChange={(e) => setFilterStore(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-semibold text-slate-800 appearance-none"
+                    style={{ backgroundImage: 'url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%2364748b\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3e%3cpolyline points=\'6 9 12 15 18 9\'/%3e%3c/svg%3e")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right 1rem center', backgroundSize: '1em' }}
+                  >
+                    <option value="all">All Stores</option>
+                    {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-2">Start Date</label>
+                  <input
+                    type="date"
+                    value={filterStartDate}
+                    onChange={(e) => setFilterStartDate(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-semibold text-slate-800"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-2">End Date</label>
+                  <input
+                    type="date"
+                    value={filterEndDate}
+                    onChange={(e) => setFilterEndDate(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-semibold text-slate-800"
+                  />
+                </div>
+              </div>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[600px] text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-50 text-[10px] font-bold uppercase tracking-widest text-text-muted">
-                    <th className="pb-3 pl-2">Date</th>
-                    <th className="pb-3">Store</th>
-                    <th className="pb-3">Item</th>
-                    <th className="pb-3 text-right pr-4">Quantity Given</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50/50 text-xs font-semibold text-text-primary">
-                  {logs.map(log => (
-                    <tr key={log.id} className="hover:bg-blue-50/10 transition-colors">
-                      <td className="py-4 pl-2 font-mono text-slate-500 text-[10px]">
-                        {new Date(log.given_at).toLocaleString()}
-                      </td>
-                      <td className="py-4">
-                        <div className="flex items-center space-x-2">
-                          <Building className="h-4 w-4 text-primary opacity-50" />
-                          <span className="font-bold text-slate-700">{log.store.name}</span>
-                        </div>
-                      </td>
-                      <td className="py-4 font-bold text-slate-800">{log.item?.name || 'Unknown Item'}</td>
-                      <td className="py-4 text-right pr-4">
-                        <span className="font-mono text-sm font-black text-emerald-600">
-                          +{log.quantity_given}
-                        </span>
-                      </td>
+
+            {/* Summary Card */}
+            <div className="rounded-3xl bg-slate-800 border border-slate-700 p-6 shadow-sm text-white flex flex-col justify-center relative overflow-hidden">
+              <div className="absolute right-0 bottom-0 opacity-10 translate-x-1/4 translate-y-1/4 pointer-events-none">
+                <Package className="h-32 w-32" />
+              </div>
+              <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-3 relative z-10">Total Value Distributed</h4>
+              <div className="relative z-10">
+                <p className="text-3xl font-black font-mono">₹{totalFilteredValue.toFixed(2)}</p>
+                <div className="flex items-center space-x-2 mt-2">
+                  <span className="bg-white/10 px-2 py-1 rounded-md text-xs font-bold text-white shadow-sm">
+                    {totalFilteredQuantity} Items
+                  </span>
+                  <span className="text-xs font-medium text-slate-300">Given Total</span>
+                </div>
+              </div>
+            </div>
+            
+          </div>
+
+          <div className="rounded-3xl bg-white border border-gray-100 p-6 shadow-sm overflow-hidden">
+            {filteredLogs.length === 0 ? (
+              <div className="py-12 text-center text-text-muted text-sm font-medium">
+                No distribution history yet for the selected filters.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[600px] text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-gray-50 text-[10px] font-bold uppercase tracking-widest text-text-muted">
+                      <th className="pb-3 pl-2">Date</th>
+                      <th className="pb-3">Store</th>
+                      <th className="pb-3">Item</th>
+                      <th className="pb-3 text-right">Quantity</th>
+                      <th className="pb-3 text-right pr-4">Total Value</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody className="divide-y divide-gray-50/50 text-xs font-semibold text-text-primary">
+                    {filteredLogs.map(log => (
+                      <tr key={log.id} className="hover:bg-blue-50/10 transition-colors">
+                        <td className="py-4 pl-2 font-mono text-slate-500 text-[10px]">
+                          {new Date(log.given_at).toLocaleString()}
+                        </td>
+                        <td className="py-4">
+                          <div className="flex items-center space-x-2">
+                            <Building className="h-4 w-4 text-primary opacity-50" />
+                            <span className="font-bold text-slate-700">{log.store.name}</span>
+                          </div>
+                        </td>
+                        <td className="py-4 font-bold text-slate-800">{log.item?.name || 'Unknown Item'}</td>
+                        <td className="py-4 text-right">
+                          <span className="font-mono text-sm font-black text-emerald-600">
+                            +{log.quantity_given}
+                          </span>
+                        </td>
+                        <td className="py-4 text-right pr-4">
+                          <span className="font-mono text-sm font-black text-slate-700">
+                            ₹{log.total_value?.toFixed(2) || '0.00'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -274,12 +375,22 @@ export default function AdminInventoryPage() {
                   className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-semibold"
                 />
               </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">Initial Quantity</label>
-                <input
-                  type="number" required min="0" value={newItemQty} onChange={e => setNewItemQty(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-mono font-bold"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">Quantity</label>
+                  <input
+                    type="number" required min="0" value={newItemQty} onChange={e => setNewItemQty(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">Per Piece Price (₹)</label>
+                  <input
+                    type="number" required min="0" step="0.01" value={newItemPrice} onChange={e => setNewItemPrice(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-mono font-bold"
+                  />
+                </div>
               </div>
               <button type="submit" className="w-full rounded-xl bg-primary hover:bg-primary-dark py-3 text-xs font-bold text-white shadow-lg shadow-primary/10 transition-colors mt-2 cursor-pointer">
                 Save Item
@@ -302,12 +413,21 @@ export default function AdminInventoryPage() {
               </button>
             </div>
             <form onSubmit={handleUpdate} className="space-y-4">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">New Total Quantity</label>
-                <input
-                  type="number" required min="0" value={editQty} onChange={e => setEditQty(e.target.value)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-mono font-bold"
-                />
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">Quantity</label>
+                  <input
+                    type="number" required min="0" value={editQty} onChange={e => setEditQty(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1.5">Price (₹)</label>
+                  <input
+                    type="number" required min="0" step="0.01" value={editPrice} onChange={e => setEditPrice(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 bg-gray-50/50 px-4 py-3 text-xs outline-none focus:border-primary focus:bg-white font-mono font-bold"
+                  />
+                </div>
               </div>
               <button type="submit" className="w-full rounded-xl bg-primary hover:bg-primary-dark py-3 text-xs font-bold text-white shadow-lg shadow-primary/10 transition-colors mt-2 cursor-pointer">
                 Update Stock

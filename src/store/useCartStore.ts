@@ -10,6 +10,7 @@ interface CartTotals {
   subtotal: number;
   cgst: number;
   sgst: number;
+  discountAmount?: number;
   total: number;
 }
 
@@ -29,7 +30,7 @@ interface CartState {
   setPaymentMethod: (method: 'Cash' | 'UPI' | 'Card') => void;
   setOrderType: (type: 'Dine In' | 'Take Away' | 'Delivery') => void;
   clearCart: () => void;
-  getTotals: () => CartTotals;
+  getTotals: (discountPct?: number) => CartTotals;
 }
 
 export const useCartStore = create<CartState>((set, get) => ({
@@ -86,7 +87,7 @@ export const useCartStore = create<CartState>((set, get) => ({
 
   clearCart: () => set({ cartItems: [], customerName: '', customerMobile: '', paymentMethod: 'Cash', orderType: 'Take Away' }),
 
-  getTotals: () => {
+  getTotals: (discountPct?: number) => {
     const { cartItems } = get();
     let totalSubtotal = 0;
     let totalCgst = 0;
@@ -98,9 +99,6 @@ export const useCartStore = create<CartState>((set, get) => ({
       const quantity = item.quantity;
 
       if (gst_inclusive) {
-        // Price includes GST (e.g. Price is ₹120 with 5% GST included)
-        // Base Price = 120 / 1.05 = 114.2857...
-        // GST Amount = 120 - 114.2857 = 5.7142...
         const itemTotal = price * quantity;
         const basePrice = itemTotal / (1 + gst_rate / 100);
         const gstAmount = itemTotal - basePrice;
@@ -112,9 +110,6 @@ export const useCartStore = create<CartState>((set, get) => ({
         totalSgst += sgst;
         grandTotal += itemTotal;
       } else {
-        // Price is base, GST is added on top (e.g. Price is ₹180 with 12% GST excluded)
-        // Base Price = 180 * quantity
-        // GST Amount = 180 * quantity * 0.12
         const itemSubtotal = price * quantity;
         const gstAmount = itemSubtotal * (gst_rate / 100);
         const cgst = gstAmount / 2;
@@ -126,12 +121,19 @@ export const useCartStore = create<CartState>((set, get) => ({
         grandTotal += (itemSubtotal + gstAmount);
       }
     });
+    
+    let discountAmount = 0;
+    if (discountPct && discountPct > 0) {
+      discountAmount = grandTotal * (discountPct / 100);
+      grandTotal -= discountAmount;
+    }
 
     // Precision Rounding to nearest 2 decimal places
     return {
       subtotal: Math.round(totalSubtotal * 100) / 100,
       cgst: Math.round(totalCgst * 100) / 100,
       sgst: Math.round(totalSgst * 100) / 100,
+      discountAmount: Math.round(discountAmount * 100) / 100,
       total: Math.round(grandTotal * 100) / 100
     };
   }

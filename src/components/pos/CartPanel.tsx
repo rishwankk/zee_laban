@@ -76,7 +76,7 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
   };
 
   // Calculate totals dynamically using our Zustand pricing engine
-  const totals = useMemo(() => getTotals(), [cartItems, getTotals]);
+  const totals = useMemo(() => getTotals(store?.discount_enabled ? store.discount_percentage : undefined), [cartItems, getTotals, store?.discount_enabled, store?.discount_percentage]);
   const isEmpty = cartItems.length === 0;
 
   // Render a high-fidelity 80mm styled thermal printer layout
@@ -185,6 +185,11 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
           <td>SGST (2.5%)</td>
           <td class="right">₹${totals.sgst.toFixed(2)}</td>
         </tr>
+        ${store?.discount_enabled && totals.discountAmount ? `
+        <tr class="bold" style="font-size: 11px; color: #16a34a;">
+          <td style="padding-top: 4px;">Disc (${store.discount_name})</td>
+          <td class="right" style="padding-top: 4px;">-₹${totals.discountAmount.toFixed(2)}</td>
+        </tr>` : ''}
         <tr class="bold" style="font-size: 13px;">
           <td style="padding-top: 6px;">GRAND TOTAL</td>
           <td class="right" style="padding-top: 6px;">₹${totals.total.toFixed(2)}</td>
@@ -297,6 +302,11 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
         customer += padRight('Subtotal (excl. GST)', 36) + padLeft(totals.subtotal.toFixed(2), 12) + '\n';
         customer += padRight('CGST (2.5%)', 36) + padLeft(totals.cgst.toFixed(2), 12) + '\n';
         customer += padRight('SGST (2.5%)', 36) + padLeft(totals.sgst.toFixed(2), 12) + '\n';
+        
+        if (store?.discount_enabled && totals.discountAmount) {
+          customer += padRight(`Disc (${store.discount_name})`, 36) + padLeft(`-` + totals.discountAmount.toFixed(2), 12) + '\n';
+        }
+
         customer += equalDivider + '\n';
         customer += padRight('GRAND TOTAL', 36) + padLeft(totals.total.toFixed(2), 12) + '\n';
         customer += equalDivider + '\n';
@@ -619,6 +629,12 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
           <span>SGST (2.5%):</span>
           <span className="font-black text-text-primary">₹{totals.sgst.toFixed(2)}</span>
         </div>
+        {store?.discount_enabled && totals.discountAmount ? (
+          <div className="flex items-center justify-between text-emerald-600">
+            <span>Disc ({store.discount_name}):</span>
+            <span className="font-black">-₹{totals.discountAmount.toFixed(2)}</span>
+          </div>
+        ) : null}
         <div className="h-[1px] w-full border-t border-dashed border-slate-200 my-1"></div>
         <div className="flex items-center justify-between text-[11px] sm:text-xs font-black text-primary">
           <span className="font-display uppercase tracking-wider">Grand Total:</span>

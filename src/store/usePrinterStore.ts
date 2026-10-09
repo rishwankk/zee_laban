@@ -434,7 +434,9 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
     const isConnected = await get().checkPrinterStatus();
     if (!isConnected) return false;
 
-    // Send a simple test block
+    const type = get().printerType;
+    const addr = get().printerAddress;
+
     const testHtml = `
       <div style="text-align: center; margin-bottom: 5px;">
         <img src="/image.png" style="width: 100px; height: auto; filter: grayscale(100%); mix-blend-mode: multiply;" alt="Logo" />
@@ -442,49 +444,33 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
       <div class="center">*** TEST PRINT ***</div>
       <div class="line"></div>
       <div class="center">PRINTER STATUS: ONLINE</div>
-      <div class="center">TYPE: ${get().printerType}</div>
-      <div class="center">ADDR: ${get().printerAddress}</div>
+      <div class="center">TYPE: ${type}</div>
+      <div class="center">ADDR: ${addr}</div>
       <div class="line"></div>
       <div class="center">${new Date().toLocaleString()}</div>
       <div class="center">Connection test successful! 😊</div>
     `;
 
-    if (typeof window !== 'undefined') {
-      const iframe = document.createElement('iframe');
-      iframe.style.position = 'fixed';
-      iframe.style.right = '0';
-      iframe.style.bottom = '0';
-      iframe.style.width = '0';
-      iframe.style.height = '0';
-      iframe.style.border = '0';
-      document.body.appendChild(iframe);
-      const doc = iframe.contentWindow?.document;
-      if (doc) {
-        doc.write(`
-          <html>
-            <head>
-              <style>
-                @page { size: 80mm auto; margin: 0; }
-                body { width: 76mm; margin: 0 auto; padding: 2mm; font-family: 'JetBrains Mono', monospace; font-size: 11px; text-align: center; }
-                .line { border-top: 1px dashed #000; margin: 5px 0; }
-                .center { text-align: center; }
-                .bold { font-weight: bold; }
-              </style>
-            </head>
-            <body>
-              ${testHtml}
-              <script>
-                window.onload = function() {
-                  window.print();
-                  setTimeout(function() { window.parent.document.body.removeChild(iframe); }, 500);
-                };
-              </script>
-            </body>
-          </html>
-        `);
-        doc.close();
-      }
-    }
+    const rawText = `
+*** TEST PRINT ***
+--------------------------------
+PRINTER STATUS: ONLINE
+TYPE: ${type}
+ADDR: ${addr}
+--------------------------------
+${new Date().toLocaleString()}
+Connection test successful! 😊
+--------------------------------
+
+
+`;
+
+    await get().triggerPrint({
+      htmlContent: testHtml,
+      rawTexts: [rawText],
+      onComplete: () => {}
+    });
+
     return true;
   }
 }));

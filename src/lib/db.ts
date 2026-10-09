@@ -12,9 +12,13 @@ export interface Store {
   pincode: string;
   upi_id?: string;
   gst_number?: string;
+  discount_enabled?: boolean;
+  discount_name?: string;
+  discount_percentage?: number;
   is_active: boolean;
   created_at: string;
 }
+
 
 export interface User {
   id: string;
@@ -114,6 +118,9 @@ export interface Bill {
   total: number;
   payment_method: 'Cash' | 'UPI' | 'Card';
   order_type?: 'Dine-in' | 'Takeaway' | 'Delivery';
+  discount_name?: string;
+  discount_percentage?: number;
+  discount_amount?: number;
   created_at: string;
 }
 
@@ -139,6 +146,7 @@ export interface AdminInventoryItem {
   id: string;
   name: string;
   quantity: number;
+  unit_price?: number;
   created_at: string;
   updated_at: string;
 }
@@ -148,6 +156,7 @@ export interface AdminInventoryLog {
   item_id: string;
   store_id: string;
   quantity_given: number;
+  total_value?: number;
   given_at: string;
 }
 

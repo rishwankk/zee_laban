@@ -520,11 +520,11 @@ export const supabaseAPI = {
     customerMobile: string,
     cartItems: { product: Product; quantity: number }[],
     paymentMethod: 'Cash' | 'UPI' | 'Card',
-    totals: { subtotal: number; cgst: number; sgst: number; total: number },
+    totals: { subtotal: number; cgst: number; sgst: number; discountAmount?: number; total: number },
     orderType: 'Dine-in' | 'Takeaway' | 'Delivery' = 'Takeaway'
   ): Promise<Bill> => {
     // 1. Generate Bill Number
-    const { data: store } = await supabase!.from('stores').select('name').eq('id', storeId).single();
+    const { data: store } = await supabase!.from('stores').select('name, discount_enabled, discount_name, discount_percentage').eq('id', storeId).single();
     const storeWords = (store?.name || "LBN").split(" ");
     const storeCode = storeWords.map((w: string) => w[0] || '').join('').toUpperCase().substring(0, 3) || "LBN";
 
@@ -543,6 +543,9 @@ export const supabaseAPI = {
       subtotal: totals.subtotal,
       cgst: totals.cgst,
       sgst: totals.sgst,
+      discount_name: (store?.discount_enabled && totals.discountAmount) ? store.discount_name : undefined,
+      discount_percentage: (store?.discount_enabled && totals.discountAmount) ? store.discount_percentage : undefined,
+      discount_amount: totals.discountAmount,
       total: totals.total,
       payment_method: paymentMethod,
       order_type: orderType,
@@ -604,7 +607,7 @@ export const supabaseAPI = {
     billId: string,
     updates: Partial<Bill>,
     newItems: { product: Product; quantity: number }[],
-    totals: { subtotal: number; cgst: number; sgst: number; total: number }
+    totals: { subtotal: number; cgst: number; sgst: number; discountAmount?: number; total: number }
   ): Promise<Bill> => {
     // 1. Get existing items
     const { data: existingItems } = await supabase!.from('bill_items').select('*').eq('bill_id', billId);
@@ -654,6 +657,7 @@ export const supabaseAPI = {
       subtotal: totals.subtotal,
       cgst: totals.cgst,
       sgst: totals.sgst,
+      discount_amount: totals.discountAmount,
       total: totals.total
     };
 
@@ -850,11 +854,12 @@ export const supabaseAPI = {
     return data as AdminInventoryItem[];
   },
 
-  addAdminInventoryItem: async (name: string, quantity: number): Promise<AdminInventoryItem> => {
+  addAdminInventoryItem: async (name: string, quantity: number, unit_price: number = 0): Promise<AdminInventoryItem> => {
     const { data, error } = await supabase!.from('admin_inventory_items').insert({
       id: `inv-${Date.now()}`,
       name,
       quantity,
+      unit_price,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }).select().single();
@@ -862,11 +867,10 @@ export const supabaseAPI = {
     return data as AdminInventoryItem;
   },
 
-  updateAdminInventoryItem: async (id: string, quantity: number): Promise<AdminInventoryItem> => {
-    const { data, error } = await supabase!.from('admin_inventory_items').update({
-      quantity,
-      updated_at: new Date().toISOString()
-    }).eq('id', id).select().single();
+  updateAdminInventoryItem: async (id: string, quantity: number, unit_price?: number): Promise<AdminInventoryItem> => {
+    const updates: any = { quantity, updated_at: new Date().toISOString() };
+    if (unit_price !== undefined) updates.unit_price = unit_price;
+    const { data, error } = await supabase!.from('admin_inventory_items').update(updates).eq('id', id).select().single();
     if (error) throw new Error(error.message);
     return data as AdminInventoryItem;
   },
@@ -892,12 +896,15 @@ export const supabaseAPI = {
     }).eq('id', itemId);
     if (upErr) throw new Error(upErr.message);
 
+    const totalValue = (item.unit_price || 0) * quantityToGive;
+
     // 3. Log the distribution
     const { error: logErr } = await supabase!.from('admin_inventory_logs').insert({
       id: `invlog-${Date.now()}`,
       item_id: itemId,
       store_id: storeId,
       quantity_given: quantityToGive,
+      total_value: totalValue,
       given_at: new Date().toISOString()
     });
     if (logErr) throw new Error(logErr.message);

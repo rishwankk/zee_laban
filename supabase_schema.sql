@@ -165,6 +165,19 @@ CREATE TABLE IF NOT EXISTS public.admin_inventory_logs (
 ALTER TABLE public.admin_inventory_items DISABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_inventory_logs DISABLE ROW LEVEL SECURITY;
 
+-- 15. Store Discount Offer
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS discount_enabled BOOLEAN DEFAULT false;
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS discount_name TEXT;
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS discount_percentage NUMERIC;
+
+ALTER TABLE public.bills ADD COLUMN IF NOT EXISTS discount_name TEXT;
+ALTER TABLE public.bills ADD COLUMN IF NOT EXISTS discount_percentage NUMERIC;
+ALTER TABLE public.bills ADD COLUMN IF NOT EXISTS discount_amount NUMERIC;
+
+-- 16. Inventory Pricing
+ALTER TABLE public.admin_inventory_items ADD COLUMN IF NOT EXISTS unit_price NUMERIC DEFAULT 0;
+ALTER TABLE public.admin_inventory_logs ADD COLUMN IF NOT EXISTS total_value NUMERIC DEFAULT 0;
+
 -- Seed Initial Admin User & Settings
 INSERT INTO public.system_settings (key, value) VALUES 
 ('admin_email', 'admin@laban.com'),
