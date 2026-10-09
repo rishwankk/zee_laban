@@ -63,8 +63,9 @@ export async function getEscPosImage(imageUrl: string, maxWidth = 240): Promise<
             if (a > 128) {
               // Convert to grayscale
               const gray = 0.299 * r + 0.587 * g + 0.114 * bl;
-              // Threshold at 128 (dark pixels become black dots)
-              if (gray < 128) {
+              // Threshold at 200 (was 128). This makes the image much darker 
+              // and easier to see on thermal paper.
+              if (gray < 200) {
                 b |= (1 << (7 - bit));
               }
             }
