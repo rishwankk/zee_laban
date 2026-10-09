@@ -5,7 +5,6 @@ import { useCartStore, CartItem } from '@/store/useCartStore';
 import { usePrinterStore } from '@/store/usePrinterStore';
 import { useAuthStore } from '@/store/useAuthStore';
 import { api, Product, Stock } from '@/lib/supabase';
-import { getEscPosImage } from '@/lib/escposUtils';
 
 import PrinterStatus from './PrinterStatus';
 import PrinterOfflineModal from './PrinterOfflineModal';
@@ -253,7 +252,7 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
         totals
       );
 
-      // Helper for raw buffer generation
+      // Helper for raw buffer generation – pure byte-level ESC/POS
       const buildReceiptRawBuffers = async (billNumber: string): Promise<Uint8Array[]> => {
         const formattedDate = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
         const formattedTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -263,113 +262,156 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
         const center = (str: string, length: number) => {
           if (str.length >= length) return str.substring(0, length);
           const leftPad = Math.floor((length - str.length) / 2);
-          const rightPad = length - str.length - leftPad;
-          return ' '.repeat(leftPad) + str + ' '.repeat(rightPad);
+          return ' '.repeat(leftPad) + str;
         };
 
-        const width = 48;
+        const enc = new TextEncoder();
+        const width = 32; // 58mm printers typically have 32 chars; 80mm have 48
         const divider = '-'.repeat(width);
         const equalDivider = '='.repeat(width);
 
-        let customer = '\n';
-        customer += '\x1B\x61\x01';
-        customer += (store?.name || 'Main Outlet') + '\n';
-        customer += ((store?.location || 'Calicut Junction') + ' | Ph: ' + (store?.owner_mobile || '+91 7994776519')) + '\n';
+        // ESC/POS command bytes
+        const ESC_INIT = new Uint8Array([0x1B, 0x40]);                     // Initialize printer
+        const ALIGN_CENTER = new Uint8Array([0x1B, 0x61, 0x01]);           // Center alignment
+        const ALIGN_LEFT = new Uint8Array([0x1B, 0x61, 0x00]);            // Left alignment
+        const BOLD_ON = new Uint8Array([0x1B, 0x45, 0x01]);               // Bold on
+        const BOLD_OFF = new Uint8Array([0x1B, 0x45, 0x00]);              // Bold off
+        const FONT_DOUBLE = new Uint8Array([0x1D, 0x21, 0x11]);           // Double width+height
+        const FONT_NORMAL = new Uint8Array([0x1D, 0x21, 0x00]);           // Normal size
+        const LF = new Uint8Array([0x0A]);                                 // Line feed
+        const CUT = new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]); // Feed + partial cut
+
+        // Helper to concat Uint8Arrays
+        const concat = (...arrays: Uint8Array[]): Uint8Array => {
+          const totalLength = arrays.reduce((sum, arr) => sum + arr.length, 0);
+          const result = new Uint8Array(totalLength);
+          let offset = 0;
+          for (const arr of arrays) {
+            result.set(arr, offset);
+            offset += arr.length;
+          }
+          return result;
+        };
+
+        const text = (s: string) => enc.encode(s);
+        const line = (s: string) => enc.encode(s + '\n');
+
+        // ─── CUSTOMER RECEIPT ───
+        const customerParts: Uint8Array[] = [
+          ESC_INIT,
+          ALIGN_CENTER, BOLD_ON, FONT_DOUBLE,
+          line('ZEE LABAN'),
+          FONT_NORMAL, BOLD_OFF,
+          line(store?.name || 'Main Outlet'),
+          line((store?.location || 'Calicut Junction')),
+          line('Ph: ' + (store?.owner_mobile || '+91 7994776519')),
+        ];
+
         if (store?.gst_number) {
-          customer += ('GSTIN: ' + store.gst_number) + '\n';
+          customerParts.push(line('GSTIN: ' + store.gst_number));
         }
-        customer += '\x1B\x61\x00';
-        customer += divider + '\n';
-        customer += center('TAX INVOICE', width) + '\n';
-        customer += padRight(`Bill No: ${billNumber}`, 24) + padLeft(`Date: ${formattedDate}`, 24) + '\n';
-        customer += padRight(`Type: ${orderType}`, 24) + padLeft(`Time: ${formattedTime}`, 24) + '\n';
+
+        customerParts.push(
+          ALIGN_LEFT,
+          line(divider),
+          ALIGN_CENTER, BOLD_ON,
+          line('TAX INVOICE'),
+          BOLD_OFF, ALIGN_LEFT,
+          line(padRight('Bill: ' + billNumber, width / 2) + padLeft('Date: ' + formattedDate, width / 2)),
+          line(padRight('Type: ' + orderType, width / 2) + padLeft('Time: ' + formattedTime, width / 2)),
+        );
+
         if (customerName) {
-          customer += `Customer: ${customerName} ${customerMobile ? '(' + customerMobile + ')' : ''}\n`;
+          customerParts.push(line('Customer: ' + customerName + (customerMobile ? ' (' + customerMobile + ')' : '')));
         }
-        customer += divider + '\n';
-        customer += padRight('ITEM', 22) + padLeft('QTY', 5) + padLeft('RATE', 9) + padLeft('AMT', 12) + '\n';
-        customer += divider + '\n';
+
+        customerParts.push(
+          line(divider),
+          BOLD_ON,
+          line(padRight('ITEM', 14) + padLeft('QTY', 4) + padLeft('RATE', 7) + padLeft('AMT', 7)),
+          BOLD_OFF,
+          line(divider),
+        );
 
         cartItems.forEach(item => {
-          const name = padRight(item.product.name, 22);
-          const qty = padLeft(item.quantity.toString(), 5);
-          const rate = padLeft(item.product.price.toFixed(2), 9);
-          const total = padLeft((item.product.price * item.quantity).toFixed(2), 12);
-          customer += `${name}${qty}${rate}${total}\n`;
+          const name = padRight(item.product.name, 14);
+          const qty = padLeft(item.quantity.toString(), 4);
+          const rate = padLeft(item.product.price.toFixed(0), 7);
+          const total = padLeft((item.product.price * item.quantity).toFixed(0), 7);
+          customerParts.push(line(name + qty + rate + total));
         });
 
-        customer += divider + '\n';
-        customer += padRight('Subtotal (excl. GST)', 36) + padLeft(totals.subtotal.toFixed(2), 12) + '\n';
-        customer += padRight('CGST (2.5%)', 36) + padLeft(totals.cgst.toFixed(2), 12) + '\n';
-        customer += padRight('SGST (2.5%)', 36) + padLeft(totals.sgst.toFixed(2), 12) + '\n';
-        
+        customerParts.push(
+          line(divider),
+          line(padRight('Subtotal', 25) + padLeft(totals.subtotal.toFixed(2), 7)),
+          line(padRight('CGST 2.5%', 25) + padLeft(totals.cgst.toFixed(2), 7)),
+          line(padRight('SGST 2.5%', 25) + padLeft(totals.sgst.toFixed(2), 7)),
+        );
+
         if (store?.discount_enabled && totals.discountAmount) {
-          customer += padRight(`Disc (${store.discount_name})`, 36) + padLeft(`-` + totals.discountAmount.toFixed(2), 12) + '\n';
+          customerParts.push(line(padRight('Disc (' + store.discount_name + ')', 25) + padLeft('-' + totals.discountAmount.toFixed(2), 7)));
         }
 
-        customer += equalDivider + '\n';
-        customer += padRight('GRAND TOTAL', 36) + padLeft(totals.total.toFixed(2), 12) + '\n';
-        customer += equalDivider + '\n';
-        customer += center(`Payment: ${paymentMethod}`, width) + '\n';
+        customerParts.push(
+          line(equalDivider),
+          BOLD_ON, FONT_DOUBLE,
+          ALIGN_CENTER,
+          line('TOTAL: Rs.' + totals.total.toFixed(2)),
+          FONT_NORMAL, BOLD_OFF,
+          ALIGN_LEFT,
+          line(equalDivider),
+          ALIGN_CENTER,
+          line('Payment: ' + paymentMethod),
+        );
 
         if (paymentMethod === 'UPI' && store?.upi_id) {
-          const upiLink = `upi://pay?pa=${store.upi_id}&am=${totals.total.toFixed(2)}&cu=INR&tn=Verified Merchant Account`;
-          const pL = (upiLink.length + 3) % 256;
-          const pH = Math.floor((upiLink.length + 3) / 256);
-
-          customer += '\n' + center('Scan to Pay via UPI', width) + '\n';
-
-          customer += '\x1B\x61\x01';
-          customer += '\x1D\x28\x6B\x04\x00\x31\x41\x32\x00';
-          customer += '\x1D\x28\x6B\x03\x00\x31\x43\x06';
-          customer += '\x1D\x28\x6B\x03\x00\x31\x45\x30';
-          customer += '\x1D\x28\x6B' + String.fromCharCode(pL) + String.fromCharCode(pH) + '\x31\x50\x30' + upiLink;
-          customer += '\x1D\x28\x6B\x03\x00\x31\x51\x30';
-          customer += '\x1B\x61\x00';
-
-          customer += '\n' + center(`VPA: ${store.upi_id}`, width) + '\n';
+          customerParts.push(line('UPI: ' + store.upi_id));
         }
 
-        const taxNote = cartItems.some(i => i.product.gst_inclusive) ? '*Prices inclusive of GST*' : '*Prices exclusive of GST*';
-        customer += '\n' + center(taxNote, width) + '\n\n';
-        customer += center('Thank you! Visit Again', width) + '\n\n\n\n';
+        const taxNote = cartItems.some(i => i.product.gst_inclusive) ? 'Prices inclusive of GST' : 'Prices exclusive of GST';
+        customerParts.push(
+          LF,
+          line(taxNote),
+          LF,
+          BOLD_ON,
+          line('Thank you! Visit Again'),
+          BOLD_OFF,
+          CUT,
+        );
 
-        let kitchen = '\n';
-        kitchen += center('KITCHEN COPY', width) + '\n';
-        kitchen += center(store?.name || 'Main Outlet', width) + '\n';
-        kitchen += divider + '\n';
-        kitchen += padRight(`KOT: ${billNumber}`, 24) + padLeft(`Time: ${formattedTime}`, 24) + '\n';
-        kitchen += padRight(`Type: ${orderType}`, 24) + padLeft(`Date: ${formattedDate}`, 24) + '\n';
-        kitchen += divider + '\n';
-        kitchen += padRight('KITCHEN ITEM', 38) + padLeft('QTY', 10) + '\n';
-        kitchen += divider + '\n';
+        const customerBuffer = concat(...customerParts);
+
+        // ─── KITCHEN COPY ───
+        const kitchenParts: Uint8Array[] = [
+          ESC_INIT,
+          ALIGN_CENTER, BOLD_ON, FONT_DOUBLE,
+          line('KITCHEN COPY'),
+          FONT_NORMAL, BOLD_OFF,
+          line(store?.name || 'Main Outlet'),
+          ALIGN_LEFT,
+          line(divider),
+          line(padRight('KOT: ' + billNumber, width / 2) + padLeft('Time: ' + formattedTime, width / 2)),
+          line(padRight('Type: ' + orderType, width / 2) + padLeft('Date: ' + formattedDate, width / 2)),
+          line(divider),
+          BOLD_ON,
+          line(padRight('ITEM', 22) + padLeft('QTY', 10)),
+          BOLD_OFF,
+          line(divider),
+        ];
 
         cartItems.forEach(item => {
-          kitchen += padRight(item.product.name, 38) + padLeft(item.quantity.toString(), 10) + '\n';
+          kitchenParts.push(BOLD_ON, line(padRight(item.product.name, 22) + padLeft(item.quantity.toString(), 10)), BOLD_OFF);
         });
 
-        kitchen += '\n' + center('*** END OF KOT ***', width) + '\n\n\n\n';
+        kitchenParts.push(
+          line(divider),
+          ALIGN_CENTER, BOLD_ON,
+          line('*** END OF KOT ***'),
+          BOLD_OFF,
+          CUT,
+        );
 
-        const encoder = new TextEncoder();
-        const initBytes = new Uint8Array([0x1B, 0x40]);
-        const cutBytes = new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]);
-
-        const logoBytes = await getEscPosImage(`${window.location.origin}/logo.png`, 180);
-
-        const customerTextBytes = encoder.encode(customer);
-        const customerBuffer = new Uint8Array(initBytes.length + logoBytes.length + customerTextBytes.length + cutBytes.length);
-        let offset = 0;
-        customerBuffer.set(initBytes, offset); offset += initBytes.length;
-        customerBuffer.set(logoBytes, offset); offset += logoBytes.length;
-        customerBuffer.set(customerTextBytes, offset); offset += customerTextBytes.length;
-        customerBuffer.set(cutBytes, offset); offset += cutBytes.length;
-
-        const kitchenTextBytes = encoder.encode(kitchen);
-        const kitchenBuffer = new Uint8Array(initBytes.length + kitchenTextBytes.length + cutBytes.length);
-        offset = 0;
-        kitchenBuffer.set(initBytes, offset); offset += initBytes.length;
-        kitchenBuffer.set(kitchenTextBytes, offset); offset += kitchenTextBytes.length;
-        kitchenBuffer.set(cutBytes, offset); offset += cutBytes.length;
+        const kitchenBuffer = concat(...kitchenParts);
 
         return [customerBuffer, kitchenBuffer];
       };
