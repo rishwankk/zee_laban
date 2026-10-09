@@ -76,7 +76,7 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
   };
 
   // Calculate totals dynamically using our Zustand pricing engine
-  const totals = useMemo(() => getTotals(store?.discount_enabled ? store.discount_percentage : undefined), [cartItems, getTotals, store?.discount_enabled, store?.discount_percentage]);
+  const totals = useMemo(() => getTotals(store?.discount_enabled ? (store.discount_percentage || undefined) : undefined), [cartItems, getTotals, store?.discount_enabled, store?.discount_percentage]);
   const isEmpty = cartItems.length === 0;
 
   // Render a high-fidelity 80mm styled thermal printer layout
