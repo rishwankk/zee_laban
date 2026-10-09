@@ -275,16 +275,29 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
     const state = get();
     if (state.printerType === 'Bluetooth' && state.btCharacteristic) {
       try {
-        const chunkSize = 100; // Smaller chunk size for better BLE stability
+        const char = state.btCharacteristic;
+        // Use the characteristic's actual properties to decide write method
+        const useWriteWithoutResponse = char.properties?.writeWithoutResponse === true;
+        const useWrite = char.properties?.write === true;
+
+        if (!useWriteWithoutResponse && !useWrite) {
+          console.error('BLE characteristic does not support write or writeWithoutResponse');
+          return false;
+        }
+
+        const chunkSize = 100;
         for (let i = 0; i < data.length; i += chunkSize) {
           const chunk = data.slice(i, i + chunkSize);
-          if (typeof state.btCharacteristic.writeValueWithoutResponse === 'function') {
-            await state.btCharacteristic.writeValueWithoutResponse(chunk);
+          
+          if (useWrite) {
+            // Prefer writeValue (reliable, waits for acknowledgment)
+            await char.writeValue(chunk);
           } else {
-            await state.btCharacteristic.writeValue(chunk);
+            // Fall back to writeValueWithoutResponse (faster but no ack)
+            await char.writeValueWithoutResponse(chunk);
           }
-          // Critical delay to prevent thermal printer buffer overflow
-          await new Promise(resolve => setTimeout(resolve, 40));
+          // Delay to prevent thermal printer buffer overflow
+          await new Promise(resolve => setTimeout(resolve, 50));
         }
         return true;
       } catch (e) {
