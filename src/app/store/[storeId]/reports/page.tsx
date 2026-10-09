@@ -696,7 +696,7 @@ export default function ReportsPage() {
         </div>
 
         <button
-          onClick={loadData}
+          onClick={() => loadData()}
           disabled={loading}
           className="flex h-10 w-10 items-center justify-center rounded-xl bg-white border border-gray-100 hover:bg-gray-50 text-text-muted shadow-sm transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
         >
