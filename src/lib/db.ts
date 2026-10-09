@@ -12,9 +12,9 @@ export interface Store {
   pincode: string;
   upi_id?: string;
   gst_number?: string;
-  discount_enabled?: boolean;
-  discount_name?: string;
-  discount_percentage?: number;
+  discount_enabled?: boolean | null;
+  discount_name?: string | null;
+  discount_percentage?: number | null;
   is_active: boolean;
   created_at: string;
 }
