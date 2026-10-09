@@ -299,7 +299,10 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
   },
 
   triggerPrint: async ({ htmlContent, htmlContents, rawTexts, rawBuffers, onComplete }) => {
-    get().checkPrinterStatus().catch(console.error);
+    try {
+      await get().checkPrinterStatus();
+    } catch(e) {}
+    
     const state = get();
 
     // Check if we can print directly to hardware via Web APIs
