@@ -276,27 +276,38 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
     if (state.printerType === 'Bluetooth' && state.btCharacteristic) {
       try {
         const char = state.btCharacteristic;
-        // Use the characteristic's actual properties to decide write method
-        const useWriteWithoutResponse = char.properties?.writeWithoutResponse === true;
-        const useWrite = char.properties?.write === true;
 
-        if (!useWriteWithoutResponse && !useWrite) {
-          console.error('BLE characteristic does not support write or writeWithoutResponse');
-          return false;
-        }
+        // Helper: wrap a write call with a timeout so it never hangs
+        const writeWithTimeout = (chunk: Uint8Array, timeoutMs = 5000): Promise<void> => {
+          return new Promise((resolve, reject) => {
+            const timer = setTimeout(() => reject(new Error('BLE write timeout')), timeoutMs);
+
+            const doWrite = async () => {
+              try {
+                // Prefer writeValueWithoutResponse (non-blocking, works on most BT printers)
+                if (char.properties?.writeWithoutResponse) {
+                  await char.writeValueWithoutResponse(chunk);
+                } else if (char.properties?.write) {
+                  await char.writeValue(chunk);
+                } else {
+                  // Last resort: try writeValueWithoutResponse anyway
+                  await char.writeValueWithoutResponse(chunk);
+                }
+                clearTimeout(timer);
+                resolve();
+              } catch (e) {
+                clearTimeout(timer);
+                reject(e);
+              }
+            };
+            doWrite();
+          });
+        };
 
         const chunkSize = 100;
         for (let i = 0; i < data.length; i += chunkSize) {
           const chunk = data.slice(i, i + chunkSize);
-          
-          if (useWrite) {
-            // Prefer writeValue (reliable, waits for acknowledgment)
-            await char.writeValue(chunk);
-          } else {
-            // Fall back to writeValueWithoutResponse (faster but no ack)
-            await char.writeValueWithoutResponse(chunk);
-          }
-          // Delay to prevent thermal printer buffer overflow
+          await writeWithTimeout(chunk);
           await new Promise(resolve => setTimeout(resolve, 50));
         }
         return true;
@@ -329,39 +340,49 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
                            (state.printerType === 'USB' && state.usbDevice && state.usbEndpoint !== null);
 
     if (canPrintDirect) {
-      try {
-        if (rawBuffers && rawBuffers.length > 0) {
-          for (const buf of rawBuffers) {
-            const success = await get().sendRawData(buf);
-            if (!success) throw new Error("Hardware write failed");
-            await new Promise(res => setTimeout(res, 500));
-          }
-          onComplete();
-          return;
-        } else if (rawTexts && rawTexts.length > 0) {
-          for (const rawText of rawTexts) {
-            const encoder = new TextEncoder();
-            const init = new Uint8Array([0x1B, 0x40]); // ESC @
-            const text = encoder.encode(rawText);
-            const cut = new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]); // GS V 0
-            
-            const finalData = new Uint8Array(init.length + text.length + cut.length);
-            finalData.set(init, 0);
-            finalData.set(text, init.length);
-            finalData.set(cut, init.length + text.length);
+      // Wrap direct printing in a master timeout so UI never hangs
+      const directPrintResult = await Promise.race([
+        (async () => {
+          try {
+            if (rawBuffers && rawBuffers.length > 0) {
+              for (const buf of rawBuffers) {
+                const success = await get().sendRawData(buf);
+                if (!success) throw new Error("Hardware write failed");
+                await new Promise(res => setTimeout(res, 500));
+              }
+              return 'success';
+            } else if (rawTexts && rawTexts.length > 0) {
+              for (const rawText of rawTexts) {
+                const encoder = new TextEncoder();
+                const init = new Uint8Array([0x1B, 0x40]);
+                const text = encoder.encode(rawText);
+                const cut = new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]);
+                
+                const finalData = new Uint8Array(init.length + text.length + cut.length);
+                finalData.set(init, 0);
+                finalData.set(text, init.length);
+                finalData.set(cut, init.length + text.length);
 
-            const success = await get().sendRawData(finalData);
-            if (!success) throw new Error("Hardware write failed");
-            
-            // Small delay between cuts to allow printer to process
-            await new Promise(res => setTimeout(res, 500));
+                const success = await get().sendRawData(finalData);
+                if (!success) throw new Error("Hardware write failed");
+                await new Promise(res => setTimeout(res, 500));
+              }
+              return 'success';
+            }
+            return 'no_data';
+          } catch (err) {
+            console.error("Direct printing failed:", err);
+            return 'failed';
           }
-          onComplete();
-          return; // Skip iframe printing completely
-        }
-      } catch (err) {
-        console.error("Direct printing failed, falling back to window.print", err);
+        })(),
+        new Promise<string>(resolve => setTimeout(() => resolve('timeout'), 15000))
+      ]);
+
+      if (directPrintResult === 'success') {
+        onComplete();
+        return;
       }
+      console.warn('Direct print did not succeed (' + directPrintResult + '), falling back to browser print');
     }
 
     // Fallback: Print using native browser print pipeline
