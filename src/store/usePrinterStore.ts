@@ -516,6 +516,7 @@ Connection test successful! 😊
       onComplete: () => {}
     });
 
+    return true;
   }
     }),
     {
