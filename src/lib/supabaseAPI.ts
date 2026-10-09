@@ -939,6 +939,27 @@ export const supabaseAPI = {
     if (logErr) throw new Error(logErr.message);
   },
 
+  deleteDistributionLog: async (logId: string): Promise<void> => {
+    // 1. Get the log to find out how much was given and to which item
+    const { data: log, error: logErr } = await supabase!.from('admin_inventory_logs').select('*').eq('id', logId).single();
+    if (logErr || !log) throw new Error('Distribution log not found');
+
+    // 2. Get the item to find current stock
+    const { data: item, error: itemErr } = await supabase!.from('admin_inventory_items').select('quantity').eq('id', log.item_id).single();
+    if (itemErr) throw new Error('Original item not found');
+
+    // 3. Add the quantity back to the master stock
+    const { error: upErr } = await supabase!.from('admin_inventory_items').update({
+      quantity: item.quantity + log.quantity_given,
+      updated_at: new Date().toISOString()
+    }).eq('id', log.item_id);
+    if (upErr) throw new Error(upErr.message);
+
+    // 4. Delete the log entry
+    const { error: delErr } = await supabase!.from('admin_inventory_logs').delete().eq('id', logId);
+    if (delErr) throw new Error(delErr.message);
+  },
+
   getAdminInventoryLogs: async (): Promise<(AdminInventoryLog & { item: AdminInventoryItem, store: Store })[]> => {
     const { data, error } = await supabase!
       .from('admin_inventory_logs')

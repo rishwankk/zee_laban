@@ -107,6 +107,17 @@ export default function AdminInventoryPage() {
     }
   };
 
+  const handleDeleteLog = async (logId: string) => {
+    if (!confirm("Are you sure you want to delete this distribution? The items will be returned to the main inventory.")) return;
+    try {
+      await api.deleteDistributionLog(logId);
+      notify("Distribution deleted and stock restored");
+      loadData();
+    } catch (err: any) {
+      notify(err.message, true);
+    }
+  };
+
   const filteredLogs = logs.filter(log => {
     if (filterStore !== 'all' && log.store_id !== filterStore) return false;
     
@@ -316,7 +327,8 @@ export default function AdminInventoryPage() {
                       <th className="pb-3">Store</th>
                       <th className="pb-3">Item</th>
                       <th className="pb-3 text-right">Quantity</th>
-                      <th className="pb-3 text-right pr-4">Total Value</th>
+                      <th className="pb-3 text-right">Total Value</th>
+                      <th className="pb-3 pr-2"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50/50 text-xs font-semibold text-text-primary">
@@ -337,10 +349,19 @@ export default function AdminInventoryPage() {
                             +{log.quantity_given}
                           </span>
                         </td>
-                        <td className="py-4 text-right pr-4">
+                        <td className="py-4 text-right">
                           <span className="font-mono text-sm font-black text-slate-700">
                             ₹{log.total_value?.toFixed(2) || '0.00'}
                           </span>
+                        </td>
+                        <td className="py-4 text-right pr-2">
+                          <button
+                            onClick={() => handleDeleteLog(log.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete and Restore Stock"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
                         </td>
                       </tr>
                     ))}
