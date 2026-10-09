@@ -329,10 +329,6 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
   },
 
   triggerPrint: async ({ htmlContent, htmlContents, rawTexts, rawBuffers, onComplete }) => {
-    try {
-      await get().checkPrinterStatus();
-    } catch(e) {}
-    
     const state = get();
 
     // Check if we can print directly to hardware via Web APIs
@@ -378,11 +374,12 @@ export const usePrinterStore = create<PrinterState>((set, get) => ({
         new Promise<string>(resolve => setTimeout(() => resolve('timeout'), 15000))
       ]);
 
-      if (directPrintResult === 'success') {
-        onComplete();
-        return;
+      if (directPrintResult !== 'success') {
+        console.warn('Direct print result: ' + directPrintResult);
       }
-      console.warn('Direct print did not succeed (' + directPrintResult + '), falling back to browser print');
+      // ALWAYS complete when hardware printer is connected – never show browser popup
+      onComplete();
+      return;
     }
 
     // Fallback: Print using native browser print pipeline
