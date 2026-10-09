@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export type PrinterType = 'USB' | 'Network' | 'Bluetooth';
 
@@ -31,7 +32,9 @@ interface PrinterState {
 
 let pollingInterval: NodeJS.Timeout | null = null;
 
-export const usePrinterStore = create<PrinterState>((set, get) => ({
+export const usePrinterStore = create<PrinterState>()(
+  persist(
+    (set, get) => ({
   isConnected: false, // Default to offline until verified
   printerType: 'Bluetooth',
   printerAddress: 'default_bt',
@@ -513,7 +516,15 @@ Connection test successful! 😊
       onComplete: () => {}
     });
 
-    return true;
   }
-}));
+    }),
+    {
+      name: 'printer-storage',
+      partialize: (state) => ({
+        printerType: state.printerType,
+        printerAddress: state.printerAddress,
+      }),
+    }
+  )
+);
 
