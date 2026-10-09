@@ -621,7 +621,7 @@ export default function ReportsPage() {
       const initBytes = new Uint8Array([0x1B, 0x40]);
       const cutBytes = new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]);
 
-      let logoBytes = new Uint8Array(0);
+      let logoBytes: any = new Uint8Array(0);
       try {
         const { getEscPosImage } = await import('@/lib/escposUtils');
         logoBytes = await getEscPosImage(`${window.location.origin}/logo.png`, 180);
