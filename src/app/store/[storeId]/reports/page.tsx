@@ -539,8 +539,7 @@ export default function ReportsPage() {
       const divider = '-'.repeat(width);
       const equalDivider = '='.repeat(width);
 
-      let customer = '\n';
-      customer += '\x1B\x61\x01';
+      let customer = '\x1B\x61\x01';
       customer += (store?.name || 'Main Outlet') + '\n';
       customer += ((store?.location || 'Calicut Junction') + ' | Ph: ' + (store?.owner_mobile || '+91 7994776519')) + '\n';
       if (store?.gst_number) {
@@ -601,9 +600,10 @@ export default function ReportsPage() {
 
       customer += '\n' + center('Thank you! Visit Again', width) + '\n\n\n\n';
 
-      let kitchen = '\n';
+      let kitchen = '\x1B\x61\x01';
       kitchen += center('KITCHEN COPY', width) + '\n';
       kitchen += center(store?.name || 'Main Outlet', width) + '\n';
+      kitchen += '\x1B\x61\x00';
       kitchen += divider + '\n';
       kitchen += padRight(`KOT: ${billNum}`, 24) + padLeft(`Time: ${formattedTime}`, 24) + '\n';
       kitchen += padRight(`Type: ${orderType}`, 24) + padLeft(`Date: ${formattedDate}`, 24) + '\n';

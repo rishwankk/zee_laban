@@ -271,8 +271,7 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
         const divider = '-'.repeat(width);
         const equalDivider = '='.repeat(width);
 
-        let customer = '\n';
-        customer += '\x1B\x61\x01';
+        let customer = '\x1B\x61\x01';
         customer += (store?.name || 'Main Outlet') + '\n';
         customer += ((store?.location || 'Calicut Junction') + ' | Ph: ' + (store?.owner_mobile || '+91 7994776519')) + '\n';
         if (store?.gst_number) {
@@ -334,9 +333,10 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
         customer += '\n' + center(taxNote, width) + '\n\n';
         customer += center('Thank you! Visit Again', width) + '\n\n\n\n';
 
-        let kitchen = '\n';
+        let kitchen = '\x1B\x61\x01';
         kitchen += center('KITCHEN COPY', width) + '\n';
         kitchen += center(store?.name || 'Main Outlet', width) + '\n';
+        kitchen += '\x1B\x61\x00';
         kitchen += divider + '\n';
         kitchen += padRight(`KOT: ${billNumber}`, 24) + padLeft(`Time: ${formattedTime}`, 24) + '\n';
         kitchen += padRight(`Type: ${orderType}`, 24) + padLeft(`Date: ${formattedDate}`, 24) + '\n';
@@ -354,7 +354,12 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
         const initBytes = new Uint8Array([0x1B, 0x40]);
         const cutBytes = new Uint8Array([0x0A, 0x0A, 0x0A, 0x0A, 0x1D, 0x56, 0x00]);
 
-        const logoBytes = await getEscPosImage(`${window.location.origin}/logo.png`, 180);
+        let logoBytes: Uint8Array = new Uint8Array(0);
+        try {
+          logoBytes = await getEscPosImage(`${window.location.origin}/logo.png`, 180);
+        } catch (e) {
+          console.error("Logo fetch failed", e);
+        }
 
         const customerTextBytes = encoder.encode(customer);
         const customerBuffer = new Uint8Array(initBytes.length + logoBytes.length + customerTextBytes.length + cutBytes.length);
