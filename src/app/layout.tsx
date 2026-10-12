@@ -1,6 +1,7 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Nunito, DM_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import PwaRegister from "@/components/PwaRegister";
 
 const nunito = Nunito({
   variable: "--font-nunito",
@@ -17,9 +18,32 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
 });
 
+export const viewport: Viewport = {
+  themeColor: "#2563eb",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export const metadata: Metadata = {
-  title: "Laban Desserts - Multi-Store POS & Billing System",
-  description: "Real-time billing, multi-store stock, and sales report management for Laban retail outlets.",
+  title: "Zee Laban POS - Multi-Store Billing & Stock System",
+  description: "Real-time billing, multi-store stock, and sales report management for Zee Laban retail outlets.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Zee Laban POS",
+  },
+  icons: {
+    icon: [
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" },
+    ],
+  },
 };
 
 export default function RootLayout({
@@ -32,7 +56,10 @@ export default function RootLayout({
       lang="en"
       className={`${nunito.variable} ${dmSans.variable} ${jetbrainsMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-gray-50 text-text-primary">{children}</body>
+      <body className="min-h-full flex flex-col bg-gray-50 text-text-primary">
+        <PwaRegister />
+        {children}
+      </body>
     </html>
   );
 }
