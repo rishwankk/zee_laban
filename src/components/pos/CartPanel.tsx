@@ -4,7 +4,7 @@ import { useState, useMemo } from 'react';
 import { useCartStore, CartItem } from '@/store/useCartStore';
 import { usePrinterStore } from '@/store/usePrinterStore';
 import { useAuthStore } from '@/store/useAuthStore';
-import { api, Product, Stock } from '@/lib/supabase';
+import { api, Product, Stock, CategoryStock } from '@/lib/supabase';
 import { getEscPosImage } from '@/lib/escposUtils';
 
 import PrinterStatus from './PrinterStatus';
@@ -30,9 +30,10 @@ import {
 interface CartPanelProps {
   onSuccess: (billNo: string) => void;
   stockList?: Stock[];
+  categoryStockList?: CategoryStock[];
 }
 
-export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps) {
+export default function CartPanel({ onSuccess, stockList = [], categoryStockList = [] }: CartPanelProps) {
   const {
     cartItems,
     customerName,
@@ -64,12 +65,30 @@ export default function CartPanel({ onSuccess, stockList = [] }: CartPanelProps)
   };
 
   const handleIncreaseQuantity = (item: CartItem) => {
-    const stockEntry = stockList.find(s => s.product_id === item.product.id);
-    const isOut = stockEntry ? (stockEntry.status === 'out_of_stock' || stockEntry.quantity <= item.quantity) : false;
+    const catKey = (item.product.category || '').trim().toLowerCase();
+    const catStock = categoryStockList?.find(c => c.category.trim().toLowerCase() === catKey);
 
-    if (isOut) {
-      triggerStockWarning(item.product.name);
-      return;
+    if (catStock) {
+      const totalInCartForCategory = cartItems
+        .filter(ci => (ci.product.category || '').trim().toLowerCase() === catKey)
+        .reduce((sum, ci) => sum + ci.quantity, 0);
+
+      if (catStock.status === 'out_of_stock' || totalInCartForCategory >= catStock.quantity) {
+        triggerStockWarning(
+          catStock.quantity === 0
+            ? `${item.product.category || 'Category'} is Out of Stock!`
+            : `${item.product.category || 'Category'} limit reached (${catStock.quantity} available)`
+        );
+        return;
+      }
+    } else {
+      const stockEntry = stockList.find(s => s.product_id === item.product.id);
+      const isOut = stockEntry ? (stockEntry.status === 'out_of_stock' || stockEntry.quantity <= item.quantity) : false;
+
+      if (isOut) {
+        triggerStockWarning(item.product.name);
+        return;
+      }
     }
 
     updateQuantity(item.product.id, item.quantity + 1);

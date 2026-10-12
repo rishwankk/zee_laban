@@ -105,6 +105,30 @@ export interface StockLog {
   updated_at: string;
 }
 
+export interface CategoryStock {
+  store_id: string;
+  category: string;
+  quantity: number;
+  status: 'in_stock' | 'low_stock' | 'out_of_stock';
+  product_count: number;
+  products?: Product[];
+  updated_at?: string;
+  updated_by?: string;
+}
+
+export interface CategoryStockLog {
+  id: string;
+  store_id: string;
+  category: string;
+  old_status: 'in_stock' | 'low_stock' | 'out_of_stock' | null;
+  new_status: 'in_stock' | 'low_stock' | 'out_of_stock';
+  old_quantity: number | null;
+  new_quantity: number;
+  updated_by: string;
+  updated_at: string;
+}
+
+
 export interface Bill {
   id: string;
   bill_number: string;

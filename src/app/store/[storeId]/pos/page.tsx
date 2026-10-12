@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useTransition } from 'react';
-import { api, Product, Stock } from '@/lib/supabase';
+import { api, Product, Stock, CategoryStock } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useCartStore } from '@/store/useCartStore';
 import CategoryTabs from '@/components/pos/CategoryTabs';
@@ -15,6 +15,7 @@ export default function POSPage() {
   
   const [products, setProducts] = useState<Product[]>([]);
   const [stockList, setStockList] = useState<Stock[]>([]);
+  const [categoryStockList, setCategoryStockList] = useState<CategoryStock[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>('ALL');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [successBillNo, setSuccessBillNo] = useState<string | null>(null);
@@ -36,6 +37,9 @@ export default function POSPage() {
       const stockData = await api.getStockByStore(store.id);
       setStockList(stockData);
 
+      const catStockData = await api.getCategoryStockByStore(store.id);
+      setCategoryStockList(catStockData);
+
       const catData = await api.getCategories();
       setCategories(['ALL', ...catData.map(c => c.name)]);
     } catch (err) {
@@ -52,21 +56,16 @@ export default function POSPage() {
   useEffect(() => {
     if (!store) return;
     
-    const handleRealtimeStock = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail.storeId === store.id) {
-        setStockList(current => 
-          current.map(s => 
-            s.product_id === detail.productId
-              ? { ...s, quantity: detail.quantity, status: detail.status }
-              : s
-          )
-        );
-      }
+    const handleRealtimeStock = () => {
+      loadCatalog();
     };
 
     window.addEventListener('lbn_realtime_stock', handleRealtimeStock);
-    return () => window.removeEventListener('lbn_realtime_stock', handleRealtimeStock);
+    window.addEventListener('lbn_realtime_category_stock', handleRealtimeStock);
+    return () => {
+      window.removeEventListener('lbn_realtime_stock', handleRealtimeStock);
+      window.removeEventListener('lbn_realtime_category_stock', handleRealtimeStock);
+    };
   }, [store]);
 
   const filteredProducts = products.filter(prod => {
@@ -75,26 +74,48 @@ export default function POSPage() {
     return matchesCategory && matchesSearch;
   });
 
-  const getStockStatus = (productId: string) => {
-    const entry = stockList.find(s => s.product_id === productId);
+  const getStockStatus = (product: Product) => {
+    const catKey = (product.category || '').trim().toLowerCase();
+    const catStock = categoryStockList.find(c => c.category.trim().toLowerCase() === catKey);
+    if (catStock) {
+      return catStock.status;
+    }
+    const entry = stockList.find(s => s.product_id === product.id);
     return entry ? entry.status : 'in_stock';
   };
 
   const handleAddItemWithStockCheck = (product: Product) => {
-    const status = getStockStatus(product.id);
-    
-    // Also check if we already have all available quantity in cart
-    const stockEntry = stockList.find(s => s.product_id === product.id);
-    const existingCartItem = cartItems.find(item => item.product.id === product.id);
-    const currentCartQty = existingCartItem ? existingCartItem.quantity : 0;
-    
-    const isOut = status === 'out_of_stock' || (stockEntry && stockEntry.quantity <= currentCartQty);
-    
-    if (isOut) {
-      setCatalogStockWarning(product.name);
-      setTimeout(() => setCatalogStockWarning(null), 2500);
-      return;
+    const catKey = (product.category || '').trim().toLowerCase();
+    const catStock = categoryStockList.find(c => c.category.trim().toLowerCase() === catKey);
+
+    if (catStock) {
+      const totalInCartForCategory = cartItems
+        .filter(i => (i.product.category || '').trim().toLowerCase() === catKey)
+        .reduce((sum, i) => sum + i.quantity, 0);
+
+      if (catStock.status === 'out_of_stock' || totalInCartForCategory >= catStock.quantity) {
+        setCatalogStockWarning(
+          catStock.quantity === 0
+            ? `${product.category || 'Category'} is Out of Stock!`
+            : `${product.category || 'Category'} limit reached (${catStock.quantity} available)`
+        );
+        setTimeout(() => setCatalogStockWarning(null), 2500);
+        return;
+      }
+    } else {
+      const status = getStockStatus(product);
+      const stockEntry = stockList.find(s => s.product_id === product.id);
+      const existingCartItem = cartItems.find(item => item.product.id === product.id);
+      const currentCartQty = existingCartItem ? existingCartItem.quantity : 0;
+      const isOut = status === 'out_of_stock' || (stockEntry && stockEntry.quantity <= currentCartQty);
+
+      if (isOut) {
+        setCatalogStockWarning(product.name);
+        setTimeout(() => setCatalogStockWarning(null), 2500);
+        return;
+      }
     }
+
     addItem(product);
   };
 
@@ -197,7 +218,7 @@ export default function POSPage() {
                 <ProductCard
                   key={product.id}
                   product={product}
-                  stockStatus={getStockStatus(product.id)}
+                  stockStatus={getStockStatus(product)}
                   onAdd={() => handleAddItemWithStockCheck(product)}
                 />
               ))}
@@ -225,7 +246,7 @@ export default function POSPage() {
           </div>
         )}
 
-        <CartPanel onSuccess={handleCheckoutSuccess} stockList={stockList} />
+        <CartPanel onSuccess={handleCheckoutSuccess} stockList={stockList} categoryStockList={categoryStockList} />
       </div>
 
       {/* Floating Checkout Action Pill for Mobile */}

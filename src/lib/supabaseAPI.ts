@@ -9,6 +9,8 @@ import {
   ShiftLog,
   Stock,
   StockLog,
+  CategoryStock,
+  CategoryStockLog,
   Bill,
   BillItem,
   AdminInventoryItem,
@@ -312,6 +314,228 @@ export const supabaseAPI = {
   },
 
   // ---------------------------------------------------------
+  // CATEGORY STOCK
+  // ---------------------------------------------------------
+  getCategoryStockByStore: async (storeId: string): Promise<CategoryStock[]> => {
+    // 1. Get all categories and active products
+    const { data: categoriesData } = await supabase!.from('categories').select('*').order('name');
+    const { data: productsData } = await supabase!.from('products').select('*').eq('is_active', true);
+    const { data: stockData } = await supabase!.from('stock').select('*').eq('store_id', storeId);
+
+    const categories: Category[] = categoriesData || [];
+    const products: Product[] = productsData || [];
+    const stocks: Stock[] = stockData || [];
+
+    // 2. Fetch category stock settings from system_settings
+    const { data: catStockSetting } = await supabase!
+      .from('system_settings')
+      .select('value')
+      .eq('key', `cat_stock_${storeId}`)
+      .single();
+
+    let catStockMap: Record<string, { quantity: number; status: CategoryStock['status']; updated_at?: string; updated_by?: string }> = {};
+    if (catStockSetting && catStockSetting.value) {
+      try {
+        catStockMap = JSON.parse(catStockSetting.value);
+      } catch (e) {
+        catStockMap = {};
+      }
+    }
+
+    // 3. Build comprehensive list of distinct category names
+    const categoryNameSet = new Map<string, string>(); // normalizedKey -> displayName
+    categories.forEach(c => {
+      if (c.name) {
+        const key = c.name.trim().toLowerCase();
+        if (!categoryNameSet.has(key)) categoryNameSet.set(key, c.name.trim());
+      }
+    });
+    products.forEach(p => {
+      if (p.category) {
+        const key = p.category.trim().toLowerCase();
+        if (!categoryNameSet.has(key)) categoryNameSet.set(key, p.category.trim());
+      }
+    });
+
+    const result: CategoryStock[] = [];
+
+    categoryNameSet.forEach((displayName, normKey) => {
+      const matchingProducts = products.filter(p => (p.category || '').trim().toLowerCase() === normKey);
+
+      let entry = catStockMap[normKey];
+      let quantity = 0;
+      let status: CategoryStock['status'] = 'out_of_stock';
+      let updatedAt = undefined;
+      let updatedBy = undefined;
+
+      if (entry !== undefined && entry.quantity !== undefined) {
+        quantity = Number(entry.quantity) || 0;
+        status = entry.status || (quantity === 0 ? 'out_of_stock' : quantity < 10 ? 'low_stock' : 'in_stock');
+        updatedAt = entry.updated_at;
+        updatedBy = entry.updated_by;
+      } else {
+        // Fallback: check if existing products in stock table have a balance
+        const matchingProductIds = new Set(matchingProducts.map(p => p.id));
+        const matchingStocks = stocks.filter(s => matchingProductIds.has(s.product_id));
+        if (matchingStocks.length > 0) {
+          const maxQty = Math.max(...matchingStocks.map(s => Number(s.quantity) || 0));
+          quantity = maxQty;
+          status = quantity === 0 ? 'out_of_stock' : quantity < 10 ? 'low_stock' : 'in_stock';
+        }
+      }
+
+      result.push({
+        store_id: storeId,
+        category: displayName,
+        quantity,
+        status,
+        product_count: matchingProducts.length,
+        products: matchingProducts,
+        updated_at: updatedAt,
+        updated_by: updatedBy
+      });
+    });
+
+    return result.sort((a, b) => a.category.localeCompare(b.category));
+  },
+
+  updateCategoryStockQuantity: async (
+    storeId: string,
+    categoryName: string,
+    newQuantity: number,
+    newStatus: CategoryStock['status'],
+    updatedByUserId: string,
+    updatedByName: string
+  ): Promise<CategoryStock> => {
+    const normKey = categoryName.trim().toLowerCase();
+
+    // 1. Fetch current settings map
+    const { data: catStockSetting } = await supabase!
+      .from('system_settings')
+      .select('value')
+      .eq('key', `cat_stock_${storeId}`)
+      .single();
+
+    let catStockMap: Record<string, any> = {};
+    if (catStockSetting && catStockSetting.value) {
+      try {
+        catStockMap = JSON.parse(catStockSetting.value);
+      } catch (e) {
+        catStockMap = {};
+      }
+    }
+
+    const oldEntry = catStockMap[normKey] || { quantity: 0, status: 'out_of_stock' };
+    const nowIso = new Date().toISOString();
+
+    catStockMap[normKey] = {
+      category: categoryName,
+      quantity: newQuantity,
+      status: newStatus,
+      updated_at: nowIso,
+      updated_by: updatedByName
+    };
+
+    // Save map to system_settings
+    await supabase!.from('system_settings').upsert({
+      key: `cat_stock_${storeId}`,
+      value: JSON.stringify(catStockMap)
+    });
+
+    // 2. Fetch and append to category logs
+    const { data: catLogsSetting } = await supabase!
+      .from('system_settings')
+      .select('value')
+      .eq('key', `cat_logs_${storeId}`)
+      .single();
+
+    let logs: CategoryStockLog[] = [];
+    if (catLogsSetting && catLogsSetting.value) {
+      try {
+        logs = JSON.parse(catLogsSetting.value);
+      } catch (e) {
+        logs = [];
+      }
+    }
+
+    const newLog: CategoryStockLog = {
+      id: `clog-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      store_id: storeId,
+      category: categoryName,
+      old_status: oldEntry.status || null,
+      new_status: newStatus,
+      old_quantity: oldEntry.quantity !== undefined ? oldEntry.quantity : null,
+      new_quantity: newQuantity,
+      updated_by: updatedByName,
+      updated_at: nowIso
+    };
+
+    logs.unshift(newLog);
+    if (logs.length > 100) logs = logs.slice(0, 100);
+
+    await supabase!.from('system_settings').upsert({
+      key: `cat_logs_${storeId}`,
+      value: JSON.stringify(logs)
+    });
+
+    // 3. Sync all products under this category in the stock table
+    const { data: products } = await supabase!.from('products').select('id, category');
+    if (products) {
+      const matchingIds = products
+        .filter(p => (p.category || '').trim().toLowerCase() === normKey)
+        .map(p => p.id);
+
+      for (const prodId of matchingIds) {
+        await supabase!.from('stock').upsert({
+          id: `stk-${storeId}-${prodId}`,
+          store_id: storeId,
+          product_id: prodId,
+          quantity: newQuantity,
+          status: newStatus,
+          updated_at: nowIso,
+          updated_by: updatedByUserId
+        });
+      }
+    }
+
+    if (isClient()) {
+      window.dispatchEvent(new CustomEvent('lbn_realtime_category_stock', {
+        detail: { storeId, category: categoryName, quantity: newQuantity, status: newStatus }
+      }));
+      window.dispatchEvent(new CustomEvent('lbn_realtime_stock', {
+        detail: { storeId }
+      }));
+    }
+
+    return {
+      store_id: storeId,
+      category: categoryName,
+      quantity: newQuantity,
+      status: newStatus,
+      product_count: 0,
+      updated_at: nowIso,
+      updated_by: updatedByName
+    };
+  },
+
+  getCategoryStockLogs: async (storeId: string): Promise<CategoryStockLog[]> => {
+    const { data } = await supabase!
+      .from('system_settings')
+      .select('value')
+      .eq('key', `cat_logs_${storeId}`)
+      .single();
+
+    if (data && data.value) {
+      try {
+        return JSON.parse(data.value);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [];
+  },
+
+  // ---------------------------------------------------------
   // STAFF
   // ---------------------------------------------------------
   getStaffByStore: async (storeId: string): Promise<Staff[]> => {
@@ -582,8 +806,10 @@ export const supabaseAPI = {
     const { error: billErr } = await supabase!.from('bills').insert(newBill);
     if (billErr) throw new Error(billErr.message);
 
-    // Prepare Items and Stock Updates
+    // Prepare Items and Category-Wise Stock Updates
     const billItemsToInsert = [];
+    const catDeductions: Record<string, { categoryName: string; quantity: number }> = {};
+
     for (const item of cartItems) {
       billItemsToInsert.push({
         id: `bi-${Date.now()}-${Math.random()}`,
@@ -595,21 +821,88 @@ export const supabaseAPI = {
         total_price: item.product.price * item.quantity
       });
 
-      // Stock Decrement
-      const { data: stk } = await supabase!.from('stock').select('quantity').eq('store_id', storeId).eq('product_id', item.product.id).single();
-      if (stk) {
-        const newQty = Math.max(0, stk.quantity - item.quantity);
-        const newStatus = newQty === 0 ? "out_of_stock" : newQty < 10 ? "low_stock" : "in_stock";
-        await supabase!.from('stock').update({ quantity: newQty, status: newStatus, updated_at: new Date().toISOString() })
-          .eq('store_id', storeId).eq('product_id', item.product.id);
+      const catRaw = item.product.category || 'General';
+      const normKey = catRaw.trim().toLowerCase();
+      if (!catDeductions[normKey]) {
+        catDeductions[normKey] = { categoryName: catRaw, quantity: 0 };
+      }
+      catDeductions[normKey].quantity += item.quantity;
+    }
+
+    // Fetch category stock settings from system_settings
+    const { data: catStockSetting } = await supabase!
+      .from('system_settings')
+      .select('value')
+      .eq('key', `cat_stock_${storeId}`)
+      .single();
+
+    let catStockMap: Record<string, any> = {};
+    if (catStockSetting && catStockSetting.value) {
+      try {
+        catStockMap = JSON.parse(catStockSetting.value);
+      } catch (e) {
+        catStockMap = {};
       }
     }
+
+    // Get all products to sync stock table
+    const { data: allProducts } = await supabase!.from('products').select('id, category');
+
+    // Decrement stock for each category
+    for (const [normKey, ded] of Object.entries(catDeductions)) {
+      let currentQty = catStockMap[normKey]?.quantity;
+      if (currentQty === undefined) {
+        const matchingIds = allProducts
+          ? allProducts.filter(p => (p.category || '').trim().toLowerCase() === normKey).map(p => p.id)
+          : [];
+        if (matchingIds.length > 0) {
+          const { data: stks } = await supabase!.from('stock').select('quantity').eq('store_id', storeId).in('product_id', matchingIds);
+          if (stks && stks.length > 0) {
+            currentQty = Math.max(...stks.map(s => Number(s.quantity) || 0));
+          }
+        }
+        if (currentQty === undefined) currentQty = 0;
+      }
+
+      const newQty = Math.max(0, currentQty - ded.quantity);
+      const newStatus = newQty === 0 ? "out_of_stock" : newQty < 10 ? "low_stock" : "in_stock";
+
+      catStockMap[normKey] = {
+        category: ded.categoryName,
+        quantity: newQty,
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      };
+
+      // Sync stock table for all products in this category
+      if (allProducts) {
+        const matchingIds = allProducts
+          .filter(p => (p.category || '').trim().toLowerCase() === normKey)
+          .map(p => p.id);
+
+        for (const prodId of matchingIds) {
+          await supabase!.from('stock').update({
+            quantity: newQty,
+            status: newStatus,
+            updated_at: new Date().toISOString()
+          }).eq('store_id', storeId).eq('product_id', prodId);
+        }
+      }
+    }
+
+    // Save updated category stock map
+    await supabase!.from('system_settings').upsert({
+      key: `cat_stock_${storeId}`,
+      value: JSON.stringify(catStockMap)
+    });
 
     const { error: itemsErr } = await supabase!.from('bill_items').insert(billItemsToInsert);
     if (itemsErr) throw new Error(itemsErr.message);
 
     if (isClient()) {
       window.dispatchEvent(new CustomEvent('lbn_realtime_bill_created', { detail: { billId: newBill.id } }));
+      window.dispatchEvent(new CustomEvent('lbn_realtime_stock', { detail: { storeId } }));
+      window.dispatchEvent(new CustomEvent('lbn_realtime_category_stock', { detail: { storeId } }));
       try {
         new BroadcastChannel('zee_laban_sync').postMessage('REFRESH_REPORTS');
       } catch (e) {}
@@ -641,12 +934,33 @@ export const supabaseAPI = {
     // 1. Get existing items
     const { data: existingItems } = await supabase!.from('bill_items').select('*').eq('bill_id', billId);
 
-    // 2. Restore all existing items stock
-    if (existingItems) {
+    // Load category stock map
+    const { data: catStockSetting } = await supabase!
+      .from('system_settings')
+      .select('value')
+      .eq('key', `cat_stock_${storeId}`)
+      .single();
+
+    let catStockMap: Record<string, any> = {};
+    if (catStockSetting && catStockSetting.value) {
+      try {
+        catStockMap = JSON.parse(catStockSetting.value);
+      } catch (e) {
+        catStockMap = {};
+      }
+    }
+
+    const { data: allProducts } = await supabase!.from('products').select('id, category');
+
+    // 2. Restore all existing items category stock
+    if (existingItems && allProducts) {
+      const prodMap = new Map(allProducts.map(p => [p.id, p]));
       for (const item of existingItems) {
-        const { data: stk } = await supabase!.from('stock').select('quantity').eq('store_id', storeId).eq('product_id', item.product_id).single();
-        if (stk) {
-          await supabase!.from('stock').update({ quantity: stk.quantity + item.quantity }).eq('store_id', storeId).eq('product_id', item.product_id);
+        const prod = prodMap.get(item.product_id);
+        const normKey = (prod?.category || 'General').trim().toLowerCase();
+        if (catStockMap[normKey]) {
+          catStockMap[normKey].quantity = (catStockMap[normKey].quantity || 0) + item.quantity;
+          catStockMap[normKey].status = catStockMap[normKey].quantity === 0 ? "out_of_stock" : catStockMap[normKey].quantity < 10 ? "low_stock" : "in_stock";
         }
       }
     }
@@ -654,7 +968,7 @@ export const supabaseAPI = {
     // 3. Delete existing items
     await supabase!.from('bill_items').delete().eq('bill_id', billId);
 
-    // 4. Subtract new items stock and prepare inserts
+    // 4. Subtract new items category stock and prepare inserts
     const billItemsToInsert = [];
     for (const item of newItems) {
       billItemsToInsert.push({
@@ -667,12 +981,39 @@ export const supabaseAPI = {
         total_price: item.product.price * item.quantity
       });
 
-      const { data: stk } = await supabase!.from('stock').select('quantity').eq('store_id', storeId).eq('product_id', item.product.id).single();
-      if (stk) {
-        const newQty = Math.max(0, stk.quantity - item.quantity);
-        const newStatus = newQty === 0 ? "out_of_stock" : newQty < 10 ? "low_stock" : "in_stock";
-        await supabase!.from('stock').update({ quantity: newQty, status: newStatus, updated_at: new Date().toISOString() })
-          .eq('store_id', storeId).eq('product_id', item.product.id);
+      const normKey = (item.product.category || 'General').trim().toLowerCase();
+      const currentQty = catStockMap[normKey]?.quantity ?? 0;
+      const newQty = Math.max(0, currentQty - item.quantity);
+      const newStatus = newQty === 0 ? "out_of_stock" : newQty < 10 ? "low_stock" : "in_stock";
+
+      catStockMap[normKey] = {
+        category: item.product.category || 'General',
+        quantity: newQty,
+        status: newStatus,
+        updated_at: new Date().toISOString()
+      };
+    }
+
+    // Save updated category stock map
+    await supabase!.from('system_settings').upsert({
+      key: `cat_stock_${storeId}`,
+      value: JSON.stringify(catStockMap)
+    });
+
+    // Sync all products in stock table
+    if (allProducts) {
+      for (const [normKey, data] of Object.entries(catStockMap)) {
+        const matchingIds = allProducts
+          .filter(p => (p.category || '').trim().toLowerCase() === normKey)
+          .map(p => p.id);
+
+        for (const prodId of matchingIds) {
+          await supabase!.from('stock').update({
+            quantity: data.quantity,
+            status: data.status,
+            updated_at: new Date().toISOString()
+          }).eq('store_id', storeId).eq('product_id', prodId);
+        }
       }
     }
 

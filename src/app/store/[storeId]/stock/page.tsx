@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { api, Product, Stock, StockLog } from '@/lib/supabase';
+import { api, Product, CategoryStock, CategoryStockLog } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
   Layers,
@@ -10,27 +10,28 @@ import {
   CheckCircle,
   AlertTriangle,
   XCircle,
-  TrendingUp,
   User,
   Clock,
   Sparkles,
   Search,
-  Filter,
   Package,
-  ArrowUpDown,
   Minus,
-  Plus
+  Plus,
+  ChevronDown,
+  ChevronUp,
+  Tag
 } from 'lucide-react';
 
 type StatusFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
 
 export default function StockPage() {
   const { store, user } = useAuthStore();
-  const [stockItems, setStockItems] = useState<(Stock & { product: Product })[]>([]);
-  const [logs, setLogs] = useState<(StockLog & { product: Product })[]>([]);
+  const [categoriesStock, setCategoriesStock] = useState<CategoryStock[]>([]);
+  const [logs, setLogs] = useState<CategoryStockLog[]>([]);
 
   // Local quantity inputs state
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({});
   const [isUpdating, setIsUpdating] = useState<string | null>(null);
   const [isSuccess, setIsSuccess] = useState<string | null>(null);
 
@@ -38,24 +39,24 @@ export default function StockPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  // Load stock and logs
+  // Load category stock and logs
   const loadData = async () => {
     if (!store) return;
     try {
-      const stockData = await api.getStockByStore(store.id);
-      setStockItems(stockData);
+      const catStockData = await api.getCategoryStockByStore(store.id);
+      setCategoriesStock(catStockData);
 
-      const logData = await api.getStockLogs(store.id);
+      const logData = await api.getCategoryStockLogs(store.id);
       setLogs(logData);
 
       // Pre-populate input values
       const initialQtys: Record<string, number> = {};
-      stockData.forEach(item => {
-        initialQtys[item.product_id] = item.quantity;
+      catStockData.forEach(item => {
+        initialQtys[item.category] = item.quantity;
       });
       setQuantities(initialQtys);
     } catch (err) {
-      console.error("Failed to load stock data", err);
+      console.error("Failed to load category stock data", err);
     }
   };
 
@@ -63,57 +64,73 @@ export default function StockPage() {
     loadData();
   }, [store]);
 
+  // Subscribe to realtime stock updates
+  useEffect(() => {
+    if (!store) return;
+    const handleSync = () => {
+      loadData();
+    };
+    window.addEventListener('lbn_realtime_category_stock', handleSync);
+    window.addEventListener('lbn_realtime_stock', handleSync);
+    return () => {
+      window.removeEventListener('lbn_realtime_category_stock', handleSync);
+      window.removeEventListener('lbn_realtime_stock', handleSync);
+    };
+  }, [store]);
+
   // Handle quantity changes
-  const handleQtyChange = (productId: string, val: string) => {
+  const handleQtyChange = (categoryName: string, val: string) => {
     const num = parseInt(val) || 0;
-    setQuantities(prev => ({ ...prev, [productId]: Math.max(0, num) }));
+    setQuantities(prev => ({ ...prev, [categoryName]: Math.max(0, num) }));
   };
 
-  // Increment / Decrement helpers for mobile cards
-  const handleIncrement = (productId: string) => {
-    setQuantities(prev => ({ ...prev, [productId]: (prev[productId] || 0) + 1 }));
+  // Increment / Decrement helpers
+  const handleIncrement = (categoryName: string) => {
+    setQuantities(prev => ({ ...prev, [categoryName]: (prev[categoryName] || 0) + 1 }));
   };
-  const handleDecrement = (productId: string) => {
-    setQuantities(prev => ({ ...prev, [productId]: Math.max(0, (prev[productId] || 0) - 1) }));
+  const handleDecrement = (categoryName: string) => {
+    setQuantities(prev => ({ ...prev, [categoryName]: Math.max(0, (prev[categoryName] || 0) - 1) }));
   };
 
-  // Save stock changes (updates quantity and decides status)
-  const handleSaveStock = async (productId: string, qty: number, defaultStatus?: Stock['status']) => {
+  const toggleExpand = (categoryName: string) => {
+    setExpandedCategories(prev => ({ ...prev, [categoryName]: !prev[categoryName] }));
+  };
+
+  // Save stock changes
+  const handleSaveStock = async (categoryName: string, qty: number, defaultStatus?: CategoryStock['status']) => {
     if (!store || !user) return;
-    setIsUpdating(productId);
+    setIsUpdating(categoryName);
 
     try {
-      // Determine status based on quantity if not forced
-      let status: Stock['status'] = defaultStatus || 'in_stock';
+      let status: CategoryStock['status'] = defaultStatus || 'in_stock';
       if (!defaultStatus) {
         if (qty === 0) status = 'out_of_stock';
         else if (qty < 10) status = 'low_stock';
       }
 
-      await api.updateStockQuantity(
+      await api.updateCategoryStockQuantity(
         store.id,
-        productId,
+        categoryName,
         qty,
         status,
         user.id,
         user.name
       );
 
-      setIsSuccess(productId);
+      setIsSuccess(categoryName);
       setTimeout(() => setIsSuccess(null), 1500);
 
-      // Reload
       await loadData();
     } catch (err) {
-      console.error("Failed to update stock", err);
+      console.error("Failed to update category stock", err);
     } finally {
       setIsUpdating(null);
     }
   };
 
-  // Direct toggle between In Stock and Out of Stock
-  const handleToggleStatus = async (productId: string, currentStatus: Stock['status'], currentQty: number) => {
-    let newStatus: Stock['status'] = 'in_stock';
+  // Toggle between In Stock and Out of Stock
+  const handleToggleStatus = async (categoryName: string, currentStatus: CategoryStock['status'], currentQty: number) => {
+    let newStatus: CategoryStock['status'] = 'in_stock';
     let newQty = currentQty;
 
     if (currentStatus === 'in_stock' || currentStatus === 'low_stock') {
@@ -121,22 +138,22 @@ export default function StockPage() {
       newQty = 0;
     } else {
       newStatus = 'in_stock';
-      newQty = Math.max(25, currentQty); // Reset to a healthy default if they toggle back online
+      newQty = Math.max(50, currentQty); // Reset to healthy default when restocked
     }
 
-    await handleSaveStock(productId, newQty, newStatus);
+    await handleSaveStock(categoryName, newQty, newStatus);
   };
 
   // Metrics calculations
-  const totalItems = stockItems.length;
-  const inStockCount = stockItems.filter(s => s.status === 'in_stock').length;
-  const lowStockCount = stockItems.filter(s => s.status === 'low_stock').length;
-  const outOfStockCount = stockItems.filter(s => s.status === 'out_of_stock').length;
+  const totalCategories = categoriesStock.length;
+  const inStockCount = categoriesStock.filter(s => s.status === 'in_stock').length;
+  const lowStockCount = categoriesStock.filter(s => s.status === 'low_stock').length;
+  const outOfStockCount = categoriesStock.filter(s => s.status === 'out_of_stock').length;
 
-  // Filtered items
-  const filteredItems = stockItems.filter(item => {
-    const matchesSearch = item.product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          item.product.category.toLowerCase().includes(searchQuery.toLowerCase());
+  // Filtered categories
+  const filteredCategories = categoriesStock.filter(item => {
+    const matchesSearch = item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          (item.products && item.products.some(p => p.name.toLowerCase().includes(searchQuery.toLowerCase())));
     const matchesFilter = statusFilter === 'all' || item.status === statusFilter;
     return matchesSearch && matchesFilter;
   });
@@ -160,11 +177,11 @@ export default function StockPage() {
       {/* HEADER SECTION */}
       <div>
         <h2 className="font-display text-xl sm:text-2xl font-black text-text-primary flex items-center space-x-2">
-          <Package className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-          <span>Store Inventory</span>
+          <Layers className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+          <span>Category Inventory Stock</span>
         </h2>
         <p className="text-[10px] sm:text-xs font-semibold text-text-muted mt-1">
-          Manage stock levels, track availability, and inspect audit logs.
+          Update available stock category-wise. All products in a category share the same stock pool during billing.
         </p>
       </div>
 
@@ -178,8 +195,8 @@ export default function StockPage() {
           }`}
         >
           <div className="text-left">
-            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-primary transition-colors">Total</span>
-            <h3 className="font-display text-lg sm:text-2xl font-black text-slate-800 mt-0.5">{totalItems}</h3>
+            <span className="text-[9px] sm:text-[10px] font-black uppercase tracking-widest text-slate-400 group-hover:text-primary transition-colors">Categories</span>
+            <h3 className="font-display text-lg sm:text-2xl font-black text-slate-800 mt-0.5">{totalCategories}</h3>
           </div>
           <div className="flex h-9 w-9 sm:h-12 sm:w-12 items-center justify-center rounded-xl sm:rounded-2xl bg-blue-50 text-primary border border-blue-100/50">
             <Layers className="h-4 w-4 sm:h-6 sm:w-6 stroke-[2.5px]" />
@@ -240,7 +257,7 @@ export default function StockPage() {
           type="text"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search products by name or category..."
+          placeholder="Search by category name or product name..."
           className="w-full rounded-2xl border border-slate-100 bg-white py-3 pl-11 pr-4 text-xs font-semibold outline-none shadow-sm transition-all focus:border-primary focus:ring-4 focus:ring-primary/5"
         />
         {searchQuery && (
@@ -256,63 +273,66 @@ export default function StockPage() {
       {/* CORE CONTENT LAYOUT */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
 
-        {/* LEFT COLUMN: STOCK EDITOR */}
-        <div className="xl:col-span-2 space-y-0">
+        {/* LEFT COLUMN: CATEGORY STOCK CONTROLLER */}
+        <div className="xl:col-span-2 space-y-4">
 
-          {/* Desktop Card Grid View */}
-          <div className="hidden md:block rounded-3xl bg-white border border-slate-100 p-5 sm:p-6 shadow-sm overflow-hidden">
+          <div className="rounded-3xl bg-white border border-slate-100 p-5 sm:p-6 shadow-sm overflow-hidden">
             <div className="flex items-center justify-between mb-6 px-1">
               <div className="flex items-center space-x-2.5">
                 <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-dark text-white shadow-md shadow-primary/20">
-                  <Package className="h-4.5 w-4.5 stroke-[2.5px]" />
+                  <Layers className="h-4.5 w-4.5 stroke-[2.5px]" />
                 </div>
                 <div>
                   <h3 className="font-display text-base font-black text-slate-800">
-                    Availability Controller
+                    Category Stock Controller
                   </h3>
-                  <p className="text-[9px] font-bold text-slate-400 mt-0.5">Manage product quantities and availability status</p>
+                  <p className="text-[9px] font-bold text-slate-400 mt-0.5">
+                    Adjust quantity once per category — automatically shared by all products in it
+                  </p>
                 </div>
               </div>
               <span className="text-[10px] font-black text-primary bg-primary/5 px-3 py-1 rounded-xl border border-primary/10">
-                {filteredItems.length} product{filteredItems.length !== 1 ? 's' : ''}
+                {filteredCategories.length} categor{filteredCategories.length !== 1 ? 'ies' : 'y'}
               </span>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {filteredItems.map((item) => {
-                const qtyVal = quantities[item.product_id] ?? item.quantity;
-                const isPending = isUpdating === item.product_id;
-                const isDone = isSuccess === item.product_id;
+              {filteredCategories.map((item) => {
+                const qtyVal = quantities[item.category] ?? item.quantity;
+                const isPending = isUpdating === item.category;
+                const isDone = isSuccess === item.category;
                 const badge = getStatusBadge(item.status);
+                const isExpanded = !!expandedCategories[item.category];
 
-                // Progress bar percentage (max 100 units for visual)
                 const fillPercent = Math.min(100, (qtyVal / 100) * 100);
                 const barColor = item.status === 'out_of_stock' ? 'bg-red-400' : item.status === 'low_stock' ? 'bg-amber-400' : 'bg-emerald-400';
 
                 return (
                   <div
-                    key={item.id}
+                    key={item.category}
                     className={`group relative rounded-2xl border bg-white p-4 transition-all duration-300 hover:shadow-lg hover:shadow-slate-100/50 ${
                       isDone ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-100 hover:border-primary/20'
                     }`}
                   >
-                    {/* Success flash overlay */}
                     {isDone && (
                       <div className="absolute inset-0 bg-emerald-500/5 rounded-2xl pointer-events-none animate-fade-in" />
                     )}
 
-                    {/* Top: Product Info Row */}
+                    {/* Top: Category Title & Status */}
                     <div className="flex items-center space-x-3.5 mb-3.5">
                       <div className="flex-1 min-w-0">
-                        <h4 className="font-black text-[13px] text-slate-800 truncate group-hover:text-primary transition-colors">
-                          {item.product.name}
-                        </h4>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className="rounded-lg bg-slate-100 text-slate-500 text-[8px] font-black tracking-wider px-1.5 py-0.5 uppercase">
-                            {item.product.category}
-                          </span>
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-black text-[14px] text-slate-800 tracking-tight truncate group-hover:text-primary transition-colors">
+                            {item.category}
+                          </h4>
                           <span className={`rounded-lg px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border ${badge.bg}`}>
                             {badge.label}
+                          </span>
+                        </div>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className="rounded-lg bg-blue-50 text-primary text-[9px] font-black tracking-wider px-2 py-0.5 flex items-center space-x-1">
+                            <Tag className="h-3 w-3 inline" />
+                            <span>{item.product_count} product{item.product_count !== 1 ? 's' : ''} under category</span>
                           </span>
                         </div>
                       </div>
@@ -321,7 +341,7 @@ export default function StockPage() {
                     {/* Stock Level Visual Bar */}
                     <div className="mb-3.5">
                       <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Stock Level</span>
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Available Pool</span>
                         <span className="font-mono text-xs font-black text-slate-700">{qtyVal} <span className="text-[9px] font-semibold text-slate-400">units</span></span>
                       </div>
                       <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
@@ -332,12 +352,12 @@ export default function StockPage() {
                       </div>
                     </div>
 
-                    {/* Bottom: Controls Row */}
+                    {/* Controls Row */}
                     <div className="flex items-center justify-between pt-3 border-t border-slate-50">
                       {/* Quantity Stepper */}
                       <div className="flex items-center space-x-1.5 bg-slate-50/80 p-1 rounded-xl border border-slate-100">
                         <button
-                          onClick={() => handleDecrement(item.product_id)}
+                          onClick={() => handleDecrement(item.category)}
                           className="flex h-7 w-7 items-center justify-center rounded-lg bg-white hover:bg-primary hover:text-white transition-all active:scale-90 shadow-sm cursor-pointer text-slate-500 border border-slate-100"
                         >
                           <Minus className="h-3 w-3 stroke-[2.5px]" />
@@ -345,17 +365,17 @@ export default function StockPage() {
                         <input
                           type="number"
                           value={qtyVal}
-                          onChange={(e) => handleQtyChange(item.product_id, e.target.value)}
+                          onChange={(e) => handleQtyChange(item.category, e.target.value)}
                           className="w-14 text-center rounded-lg border border-slate-200 bg-white py-1 font-mono text-xs font-black text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
                         />
                         <button
-                          onClick={() => handleIncrement(item.product_id)}
+                          onClick={() => handleIncrement(item.category)}
                           className="flex h-7 w-7 items-center justify-center rounded-lg bg-white hover:bg-primary hover:text-white transition-all active:scale-90 shadow-sm cursor-pointer text-slate-500 border border-slate-100"
                         >
                           <Plus className="h-3 w-3 stroke-[2.5px]" />
                         </button>
                         <button
-                          onClick={() => handleSaveStock(item.product_id, qtyVal)}
+                          onClick={() => handleSaveStock(item.category, qtyVal)}
                           disabled={isPending || item.quantity === qtyVal}
                           className={`rounded-lg p-1.5 transition-all active:scale-95 cursor-pointer shadow-sm ${
                             isDone
@@ -367,9 +387,9 @@ export default function StockPage() {
                         </button>
                       </div>
 
-                      {/* Toggle Button */}
+                      {/* Toggle Quick Action Button */}
                       <button
-                        onClick={() => handleToggleStatus(item.product_id, item.status, item.quantity)}
+                        onClick={() => handleToggleStatus(item.category, item.status, item.quantity)}
                         className={`rounded-xl px-3.5 py-2 text-[9px] font-black uppercase tracking-widest transition-all active:scale-[0.96] cursor-pointer shadow-sm ${
                           item.status === 'out_of_stock'
                             ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-emerald-500/15 hover:shadow-emerald-500/25'
@@ -379,136 +399,69 @@ export default function StockPage() {
                         {item.status === 'out_of_stock' ? '✓ Restock' : '✕ Mark Empty'}
                       </button>
                     </div>
+
+                    {/* Expandable Included Products Accordion */}
+                    {item.products && item.products.length > 0 && (
+                      <div className="mt-3 pt-2.5 border-t border-slate-50/80">
+                        <button
+                          onClick={() => toggleExpand(item.category)}
+                          className="w-full flex items-center justify-between text-[10px] font-black text-slate-500 hover:text-primary transition-colors py-1 cursor-pointer"
+                        >
+                          <span>{isExpanded ? 'Hide products' : `View ${item.products.length} product${item.products.length !== 1 ? 's' : ''} in this category`}</span>
+                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        </button>
+
+                        {isExpanded && (
+                          <div className="mt-2 space-y-1.5 max-h-36 overflow-y-auto pr-1 scrollbar-thin">
+                            {item.products.map(prod => (
+                              <div
+                                key={prod.id}
+                                className="flex items-center justify-between rounded-xl bg-slate-50/70 px-2.5 py-1.5 text-[11px]"
+                              >
+                                <span className="font-bold text-slate-700 truncate">{prod.name}</span>
+                                <span className="font-mono font-black text-slate-500 text-[10px] shrink-0 ml-2">₹{prod.price}</span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
 
-            {filteredItems.length === 0 && (
+            {filteredCategories.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
                 <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 mb-4 border border-slate-100">
                   <Package className="h-8 w-8 text-slate-200" />
                 </div>
-                <p className="text-sm font-black text-slate-400">No products match your filter</p>
+                <p className="text-sm font-black text-slate-400">No categories match your search</p>
                 <p className="text-[10px] text-slate-400 mt-1">Try adjusting the search or status filter above.</p>
               </div>
             )}
           </div>
-
-          {/* ── MOBILE CARD VIEW ── */}
-          <div className="md:hidden space-y-3">
-            <div className="flex items-center justify-between px-1">
-              <div className="flex items-center space-x-2">
-                <Sparkles className="h-4 w-4 text-primary animate-pulse" />
-                <h3 className="font-display text-sm font-black text-slate-800">Stock Items</h3>
-              </div>
-              <span className="text-[9px] font-bold text-slate-400 bg-white px-2 py-0.5 rounded-lg border border-slate-100">
-                {filteredItems.length} items
-              </span>
-            </div>
-
-            {filteredItems.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-12 text-center bg-white rounded-2xl border border-slate-100">
-                <Package className="h-10 w-10 text-slate-200 mb-3" />
-                <p className="text-sm font-bold text-slate-400">No products found</p>
-              </div>
-            )}
-
-            {filteredItems.map((item) => {
-              const qtyVal = quantities[item.product_id] ?? item.quantity;
-              const isPending = isUpdating === item.product_id;
-              const isDone = isSuccess === item.product_id;
-              const badge = getStatusBadge(item.status);
-
-              return (
-                <div
-                  key={item.id}
-                  className="rounded-2xl bg-white border border-slate-100 p-4 shadow-sm hover:shadow-md transition-all space-y-3"
-                >
-                  {/* Top row: Name + Status */}
-                  <div className="flex items-start space-x-3">
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-black text-sm text-slate-800 truncate">{item.product.name}</h4>
-                      <div className="flex items-center space-x-2 mt-1">
-                        <span className="rounded-lg bg-primary/10 text-primary text-[8px] font-black tracking-wider px-1.5 py-0.5 uppercase">
-                          {item.product.category}
-                        </span>
-                        <span className={`rounded-lg px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border ${badge.bg}`}>
-                          {badge.label}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bottom row: Qty controls + Action */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-50">
-                    {/* Quantity Stepper */}
-                    <div className="flex items-center space-x-2 bg-slate-50 p-1 rounded-xl border border-slate-100">
-                      <button
-                        onClick={() => handleDecrement(item.product_id)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-white hover:bg-primary hover:text-white transition-all active:scale-90 shadow-sm cursor-pointer text-slate-600 border border-slate-100"
-                      >
-                        <Minus className="h-3.5 w-3.5 stroke-[2.5px]" />
-                      </button>
-                      <input
-                        type="number"
-                        value={qtyVal}
-                        onChange={(e) => handleQtyChange(item.product_id, e.target.value)}
-                        className="w-14 text-center rounded-lg border border-slate-200 bg-white py-1.5 font-mono text-sm font-black text-slate-800 focus:border-primary outline-none"
-                      />
-                      <button
-                        onClick={() => handleIncrement(item.product_id)}
-                        className="flex h-8 w-8 items-center justify-center rounded-lg bg-white hover:bg-primary hover:text-white transition-all active:scale-90 shadow-sm cursor-pointer text-slate-600 border border-slate-100"
-                      >
-                        <Plus className="h-3.5 w-3.5 stroke-[2.5px]" />
-                      </button>
-                      <button
-                        onClick={() => handleSaveStock(item.product_id, qtyVal)}
-                        disabled={isPending || item.quantity === qtyVal}
-                        className={`rounded-lg p-2 transition-all active:scale-95 cursor-pointer shadow-sm ml-1 ${
-                          isDone
-                            ? 'bg-success text-white'
-                            : 'bg-white border border-slate-200 text-primary hover:bg-primary hover:text-white'
-                        } disabled:opacity-40 disabled:cursor-not-allowed`}
-                      >
-                        {isDone ? <CheckCircle className="h-4 w-4" /> : <Save className="h-4 w-4 stroke-[2.5px]" />}
-                      </button>
-                    </div>
-
-                    {/* Toggle Button */}
-                    <button
-                      onClick={() => handleToggleStatus(item.product_id, item.status, item.quantity)}
-                      className={`rounded-xl px-3 py-2 text-[9px] font-black uppercase tracking-widest transition-all active:scale-[0.96] cursor-pointer shadow-sm ${
-                        item.status === 'out_of_stock'
-                          ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white'
-                          : 'bg-white border border-red-100 text-red-600 hover:bg-red-50'
-                      }`}
-                    >
-                      {item.status === 'out_of_stock' ? 'Restock' : 'Empty'}
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
         </div>
 
-        {/* RIGHT COLUMN: STOCK AUDIT LOG HISTORY */}
-        <div className="rounded-3xl bg-white border border-slate-100 p-4 sm:p-6 shadow-sm flex flex-col max-h-[450px] sm:max-h-[550px] overflow-hidden">
+        {/* RIGHT COLUMN: CATEGORY AUDIT LOG HISTORY */}
+        <div className="rounded-3xl bg-white border border-slate-100 p-4 sm:p-6 shadow-sm flex flex-col max-h-[550px] overflow-hidden">
 
           <div className="flex items-center space-x-2.5 mb-5">
             <History className="h-5 w-5 text-primary" />
-            <h3 className="font-display text-sm font-black text-text-primary">
-              Audit Log
-            </h3>
+            <div>
+              <h3 className="font-display text-sm font-black text-text-primary">
+                Category Stock Logs
+              </h3>
+              <p className="text-[9px] font-bold text-slate-400">Audit trail of category adjustments</p>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
             {logs.length === 0 ? (
               <div className="flex h-48 flex-col items-center justify-center text-center p-4">
                 <Clock className="h-8 w-8 text-gray-200 mb-2" />
-                <span className="text-xs font-semibold text-text-muted">No stock history yet.</span>
-                <span className="text-[10px] text-text-muted/70 mt-1">Changes are audited here.</span>
+                <span className="text-xs font-semibold text-text-muted">No category logs yet.</span>
+                <span className="text-[10px] text-text-muted/70 mt-1">Updates to category quantities appear here.</span>
               </div>
             ) : (
               logs.map((log) => (
@@ -518,7 +471,7 @@ export default function StockPage() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <span className="font-black text-xs text-text-primary line-clamp-1">
-                      {log.product.name}
+                      {log.category}
                     </span>
                     <span className="text-[8px] font-bold text-text-muted whitespace-nowrap bg-white px-2 py-0.5 rounded border border-gray-100 shrink-0">
                       {new Date(log.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -565,3 +518,4 @@ export default function StockPage() {
     </div>
   );
 }
+
