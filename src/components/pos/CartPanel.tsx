@@ -121,7 +121,10 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
     cartItems.forEach(item => {
       kitchenItemsRows += `
         <tr>
-          <td style="font-weight: bold; font-size: 12px; padding: 4px 0;">${item.product.name}</td>
+          <td style="padding: 4px 0;">
+            <div style="font-weight: bold; font-size: 12px;">${item.product.name}</div>
+            ${item.product.category ? `<div style="font-size: 9px; color: #555; font-style: italic;">Cat: ${item.product.category}</div>` : ''}
+          </td>
           <td class="right" style="font-weight: bold; font-size: 13px; text-align: right; padding: 4px 0;">${item.quantity}</td>
         </tr>
       `;
@@ -227,7 +230,7 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
       <div class="line"></div>
       <table style="margin-bottom: 6px;">
         <tr>
-          <td>KOT: <span class="bold">${billNumber}</span></td>
+          <td>Bill No: <span class="bold">${billNumber}</span></td>
           <td class="right">Time: <span class="bold">${formattedTime}</span></td>
         </tr>
         <tr>
@@ -357,7 +360,7 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
         kitchen += center(store?.name || 'Main Outlet', width) + '\n';
         kitchen += '\x1B\x61\x00';
         kitchen += divider + '\n';
-        kitchen += padRight(`KOT: ${billNumber}`, 24) + padLeft(`Time: ${formattedTime}`, 24) + '\n';
+        kitchen += padRight(`Bill No: ${billNumber}`, 24) + padLeft(`Time: ${formattedTime}`, 24) + '\n';
         kitchen += padRight(`Type: ${orderType}`, 24) + padLeft(`Date: ${formattedDate}`, 24) + '\n';
         kitchen += divider + '\n';
         kitchen += padRight('KITCHEN ITEM', 38) + padLeft('QTY', 10) + '\n';
@@ -365,6 +368,9 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
 
         cartItems.forEach(item => {
           kitchen += padRight(item.product.name, 38) + padLeft(item.quantity.toString(), 10) + '\n';
+          if (item.product.category) {
+            kitchen += padRight(`  Cat: ${item.product.category}`, 38) + '\n';
+          }
         });
 
         kitchen += '\n' + center('*** END OF KOT ***', width) + '\n\n\n\n';
