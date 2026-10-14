@@ -225,9 +225,6 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
     `;
 
     const kitchenCopy = `
-      <div style="text-align: center; margin-bottom: 4px;">
-        <img src="${window.location.origin}/logo.png" style="width: 90px; height: auto; display: block; margin: 0 auto;" alt="ZEE LABAN" />
-      </div>
       <div class="center bold" style="font-size: 15px; margin-bottom: 4px; letter-spacing: 1px;">KITCHEN COPY</div>
       <div class="center" style="font-size: 9px; margin-bottom: 6px;">${store?.name || 'Main Outlet'}</div>
       <div class="line"></div>
@@ -398,10 +395,9 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
         customerBuffer.set(cutBytes, offset); offset += cutBytes.length;
 
         const kitchenTextBytes = encoder.encode(kitchen);
-        const kitchenBuffer = new Uint8Array(initBytes.length + logoBytes.length + kitchenTextBytes.length + cutBytes.length);
+        const kitchenBuffer = new Uint8Array(initBytes.length + kitchenTextBytes.length + cutBytes.length);
         offset = 0;
         kitchenBuffer.set(initBytes, offset); offset += initBytes.length;
-        kitchenBuffer.set(logoBytes, offset); offset += logoBytes.length;
         kitchenBuffer.set(kitchenTextBytes, offset); offset += kitchenTextBytes.length;
         kitchenBuffer.set(cutBytes, offset); offset += cutBytes.length;
 
