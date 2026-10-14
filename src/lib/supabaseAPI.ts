@@ -763,6 +763,22 @@ export const supabaseAPI = {
     return data as BillItem[];
   },
 
+  getDailyBillCount: async (storeId: string): Promise<number> => {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const { count } = await supabase!
+      .from('bills')
+      .select('*', { count: 'exact', head: true })
+      .eq('store_id', storeId)
+      .gte('created_at', todayStart.toISOString())
+      .lte('created_at', todayEnd.toISOString());
+
+    return (count || 0);
+  },
+
   saveBill: async (
     storeId: string,
     cashierId: string,

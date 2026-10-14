@@ -99,7 +99,7 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
   const isEmpty = cartItems.length === 0;
 
   // Render a high-fidelity 80mm styled thermal printer layout
-  const buildReceiptHtml = (billNumber: string) => {
+  const buildReceiptHtml = (billNumber: string, kotToken: number) => {
     const formattedDate = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
     const formattedTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -234,7 +234,7 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
           <td class="right">Time: <span class="bold">${formattedTime}</span></td>
         </tr>
         <tr>
-          <td>Type: <span class="bold">${orderType}</span></td>
+          <td>Token: <span class="bold" style="font-size: 16px;">#${kotToken}</span></td>
           <td class="right">Date: <span class="bold">${formattedDate}</span></td>
         </tr>
       </table>
@@ -276,7 +276,7 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
       );
 
       // Helper for raw buffer generation
-      const buildReceiptRawBuffers = async (billNumber: string): Promise<Uint8Array[]> => {
+      const buildReceiptRawBuffers = async (billNumber: string, kotToken: number): Promise<Uint8Array[]> => {
         const formattedDate = new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
         const formattedTime = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -361,6 +361,7 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
         kitchen += '\x1B\x61\x00';
         kitchen += divider + '\n';
         kitchen += padRight(`Bill No: ${billNumber}`, 24) + padLeft(`Time: ${formattedTime}`, 24) + '\n';
+        kitchen += center(`TOKEN: #${kotToken}`, width) + '\n';
         kitchen += padRight(`Type: ${orderType}`, 24) + padLeft(`Date: ${formattedDate}`, 24) + '\n';
         kitchen += divider + '\n';
         kitchen += padRight('KITCHEN ITEM', 38) + padLeft('QTY', 10) + '\n';
@@ -404,8 +405,12 @@ export default function CartPanel({ onSuccess, stockList = [], categoryStockList
         return [customerBuffer, kitchenBuffer];
       };
 
-      const htmlContents = buildReceiptHtml(bill.bill_number);
-      const rawBuffers = await buildReceiptRawBuffers(bill.bill_number);
+      const dailyCount = await api.getDailyBillCount(store.id);
+      // dailyCount already includes the just-inserted bill, so it is the token number
+      const kotToken = dailyCount;
+
+      const htmlContents = buildReceiptHtml(bill.bill_number, kotToken);
+      const rawBuffers = await buildReceiptRawBuffers(bill.bill_number, kotToken);
 
       await triggerPrint({
         htmlContents,
