@@ -56,7 +56,32 @@ export interface Staff {
   phone: string;
   role: 'cashier' | 'helper' | 'delivery';
   joining_date: string;
+  monthly_salary?: number;
   is_active: boolean;
+  created_by?: string;
+  created_at: string;
+}
+
+export interface StaffAttendance {
+  id: string;
+  staff_id: string;
+  store_id: string;
+  date: string; // YYYY-MM-DD
+  status: 'present' | 'absent';
+  notes?: string;
+  marked_by?: string;
+  created_at: string;
+}
+
+export interface ShopExpense {
+  id: string;
+  store_id: string;
+  title: string;
+  category: string;
+  amount: number;
+  date: string; // YYYY-MM-DD
+  payment_method: 'Cash' | 'UPI' | 'Card' | 'Other';
+  notes?: string;
   created_by?: string;
   created_at: string;
 }

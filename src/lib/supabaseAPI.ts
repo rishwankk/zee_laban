@@ -5,6 +5,8 @@ import {
   Category,
   Product,
   Staff,
+  StaffAttendance,
+  ShopExpense,
   StaffAdvance,
   ShiftLog,
   Stock,
@@ -538,28 +540,103 @@ export const supabaseAPI = {
   // ---------------------------------------------------------
   // STAFF
   // ---------------------------------------------------------
+  // STAFF & ATTENDANCE
+  // ---------------------------------------------------------
   getStaffByStore: async (storeId: string): Promise<Staff[]> => {
     const { data, error } = await supabase!.from('staff').select('*').eq('store_id', storeId).eq('is_active', true);
     if (error) throw new Error(error.message);
-    return data as Staff[];
+    const staffList = (data || []) as Staff[];
+
+    // Resilient fallback for monthly salary if column is not yet migrated in Supabase
+    try {
+      const { data: salarySetting } = await supabase!
+        .from('system_settings')
+        .select('value')
+        .eq('key', `staff_salaries_${storeId}`)
+        .maybeSingle();
+
+      if (salarySetting && salarySetting.value) {
+        const salaryMap: Record<string, number> = JSON.parse(salarySetting.value);
+        staffList.forEach(s => {
+          if (s.monthly_salary === undefined || s.monthly_salary === null) {
+            s.monthly_salary = salaryMap[s.id] || 0;
+          }
+        });
+      }
+    } catch (e) {
+      // Ignore fallback read failure
+    }
+
+    return staffList;
   },
 
   addStaff: async (storeId: string, member: Omit<Staff, 'id' | 'store_id' | 'is_active' | 'created_at'>): Promise<Staff> => {
+    const newId = `stf-${Date.now()}`;
+    const monthlySalary = member.monthly_salary !== undefined ? Number(member.monthly_salary) : 0;
+
+    let inserted: Staff | null = null;
+    // Attempt insert with monthly_salary
     const { data, error } = await supabase!.from('staff').insert({
       ...member,
-      id: `stf-${Date.now()}`,
+      id: newId,
       store_id: storeId,
+      monthly_salary: monthlySalary,
       is_active: true,
       created_at: new Date().toISOString()
-    }).select().single();
-    if (error) throw new Error(error.message);
-    return data as Staff;
+    }).select().maybeSingle();
+
+    if (error) {
+      // If column doesn't exist yet, retry without monthly_salary and store in system_settings
+      const { monthly_salary: _discard, ...withoutSalary } = member;
+      const { data: fallbackData, error: fbError } = await supabase!.from('staff').insert({
+        ...withoutSalary,
+        id: newId,
+        store_id: storeId,
+        is_active: true,
+        created_at: new Date().toISOString()
+      }).select().single();
+
+      if (fbError) throw new Error(fbError.message);
+      inserted = { ...(fallbackData as Staff), monthly_salary: monthlySalary };
+    } else {
+      inserted = data as Staff;
+    }
+
+    // Always mirror to system_settings for resilience
+    try {
+      const { data: cur } = await supabase!.from('system_settings').select('value').eq('key', `staff_salaries_${storeId}`).maybeSingle();
+      const map: Record<string, number> = cur?.value ? JSON.parse(cur.value) : {};
+      map[newId] = monthlySalary;
+      await supabase!.from('system_settings').upsert({ key: `staff_salaries_${storeId}`, value: JSON.stringify(map) });
+    } catch (e) {}
+
+    return inserted!;
   },
 
   updateStaff: async (id: string, updates: Partial<Staff>): Promise<Staff> => {
-    const { data, error } = await supabase!.from('staff').update(updates).eq('id', id).select().single();
-    if (error) throw new Error(error.message);
-    return data as Staff;
+    let result: Staff | null = null;
+    const { data, error } = await supabase!.from('staff').update(updates).eq('id', id).select().maybeSingle();
+
+    if (error) {
+      // If error is column monthly_salary not found
+      const { monthly_salary: _discard, ...safeUpdates } = updates;
+      const { data: safeData, error: safeErr } = await supabase!.from('staff').update(safeUpdates).eq('id', id).select().single();
+      if (safeErr) throw new Error(safeErr.message);
+      result = { ...(safeData as Staff), monthly_salary: updates.monthly_salary ?? 0 };
+    } else {
+      result = data as Staff;
+    }
+
+    if (updates.monthly_salary !== undefined && result && result.store_id) {
+      try {
+        const { data: cur } = await supabase!.from('system_settings').select('value').eq('key', `staff_salaries_${result.store_id}`).maybeSingle();
+        const map: Record<string, number> = cur?.value ? JSON.parse(cur.value) : {};
+        map[id] = Number(updates.monthly_salary);
+        await supabase!.from('system_settings').upsert({ key: `staff_salaries_${result.store_id}`, value: JSON.stringify(map) });
+      } catch (e) {}
+    }
+
+    return result!;
   },
 
   deactivateStaff: async (id: string): Promise<void> => {
@@ -1334,5 +1411,258 @@ export const supabaseAPI = {
       item: Array.isArray(log.item) ? log.item[0] : log.item,
       store: Array.isArray(log.store) ? log.store[0] : log.store
     }));
+  },
+
+  // ---------------------------------------------------------
+  // STAFF ATTENDANCE (COME / NOT COME TRACKING)
+  // ---------------------------------------------------------
+  getStaffAttendanceByStore: async (storeId: string, monthPrefix?: string): Promise<StaffAttendance[]> => {
+    try {
+      let query = supabase!.from('staff_attendance').select('*').eq('store_id', storeId);
+      if (monthPrefix) {
+        query = query.gte('date', `${monthPrefix}-01`).lte('date', `${monthPrefix}-31`);
+      }
+      const { data, error } = await query;
+      if (!error && data) {
+        return data as StaffAttendance[];
+      }
+    } catch (e) {}
+
+    // Resilient fallback from system_settings
+    try {
+      const { data: setting } = await supabase!
+        .from('system_settings')
+        .select('value')
+        .eq('key', `staff_attendance_${storeId}`)
+        .maybeSingle();
+
+      if (setting && setting.value) {
+        let list: StaffAttendance[] = JSON.parse(setting.value);
+        if (monthPrefix) {
+          list = list.filter(a => a.date.startsWith(monthPrefix));
+        }
+        return list;
+      }
+    } catch (e) {}
+
+    return [];
+  },
+
+  setStaffAttendance: async (
+    storeId: string,
+    staffId: string,
+    date: string,
+    status: 'present' | 'absent',
+    markedBy?: string,
+    notes?: string
+  ): Promise<StaffAttendance> => {
+    const record: StaffAttendance = {
+      id: `att-${staffId}-${date}`,
+      staff_id: staffId,
+      store_id: storeId,
+      date,
+      status,
+      notes: notes || undefined,
+      marked_by: markedBy || undefined,
+      created_at: new Date().toISOString()
+    };
+
+    // Try database table upsert
+    let dbSuccess = false;
+    try {
+      const { error } = await supabase!
+        .from('staff_attendance')
+        .upsert(record, { onConflict: 'staff_id,date' });
+      if (!error) dbSuccess = true;
+    } catch (e) {}
+
+    // Mirror to system_settings as resilient backup
+    try {
+      const { data: cur } = await supabase!
+        .from('system_settings')
+        .select('value')
+        .eq('key', `staff_attendance_${storeId}`)
+        .maybeSingle();
+
+      let list: StaffAttendance[] = cur?.value ? JSON.parse(cur.value) : [];
+      const existingIdx = list.findIndex(a => a.staff_id === staffId && a.date === date);
+      if (existingIdx >= 0) {
+        list[existingIdx] = record;
+      } else {
+        list.push(record);
+      }
+      await supabase!.from('system_settings').upsert({
+        key: `staff_attendance_${storeId}`,
+        value: JSON.stringify(list)
+      });
+    } catch (e) {}
+
+    if (isClient()) {
+      window.dispatchEvent(new CustomEvent('zee_staff_attendance_updated', { detail: { storeId, record } }));
+    }
+
+    return record;
+  },
+
+  setBulkStaffAttendance: async (
+    storeId: string,
+    date: string,
+    records: { staffId: string; status: 'present' | 'absent' }[],
+    markedBy?: string
+  ): Promise<StaffAttendance[]> => {
+    const listToSave: StaffAttendance[] = records.map(r => ({
+      id: `att-${r.staffId}-${date}`,
+      staff_id: r.staffId,
+      store_id: storeId,
+      date,
+      status: r.status,
+      marked_by: markedBy,
+      created_at: new Date().toISOString()
+    }));
+
+    // Try DB batch upsert
+    try {
+      await supabase!
+        .from('staff_attendance')
+        .upsert(listToSave, { onConflict: 'staff_id,date' });
+    } catch (e) {}
+
+    // Mirror to system_settings
+    try {
+      const { data: cur } = await supabase!
+        .from('system_settings')
+        .select('value')
+        .eq('key', `staff_attendance_${storeId}`)
+        .maybeSingle();
+
+      let existing: StaffAttendance[] = cur?.value ? JSON.parse(cur.value) : [];
+      listToSave.forEach(newItem => {
+        const idx = existing.findIndex(e => e.staff_id === newItem.staff_id && e.date === newItem.date);
+        if (idx >= 0) {
+          existing[idx] = newItem;
+        } else {
+          existing.push(newItem);
+        }
+      });
+
+      await supabase!.from('system_settings').upsert({
+        key: `staff_attendance_${storeId}`,
+        value: JSON.stringify(existing)
+      });
+    } catch (e) {}
+
+    if (isClient()) {
+      window.dispatchEvent(new CustomEvent('zee_staff_attendance_updated', { detail: { storeId, date } }));
+    }
+
+    return listToSave;
+  },
+
+  // ---------------------------------------------------------
+  // SHOP EXPENSES (DAILY EXPENSES)
+  // ---------------------------------------------------------
+  getExpensesByStore: async (storeId: string, date?: string): Promise<ShopExpense[]> => {
+    try {
+      let query = supabase!
+        .from('shop_expenses')
+        .select('*')
+        .eq('store_id', storeId)
+        .order('created_at', { ascending: false });
+
+      if (date) {
+        query = query.eq('date', date);
+      }
+
+      const { data, error } = await query;
+      if (!error && data) {
+        return data as ShopExpense[];
+      }
+    } catch (e) {}
+
+    // Resilient fallback from system_settings
+    try {
+      const { data: setting } = await supabase!
+        .from('system_settings')
+        .select('value')
+        .eq('key', `shop_expenses_${storeId}`)
+        .maybeSingle();
+
+      if (setting && setting.value) {
+        let list: ShopExpense[] = JSON.parse(setting.value);
+        if (date) {
+          list = list.filter(e => e.date === date);
+        }
+        return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      }
+    } catch (e) {}
+
+    return [];
+  },
+
+  addExpense: async (
+    storeId: string,
+    expense: Omit<ShopExpense, 'id' | 'store_id' | 'created_at'>
+  ): Promise<ShopExpense> => {
+    const newRecord: ShopExpense = {
+      ...expense,
+      id: `exp-${Date.now()}`,
+      store_id: storeId,
+      amount: Number(expense.amount) || 0,
+      created_at: new Date().toISOString()
+    };
+
+    // Try inserting into DB table
+    try {
+      await supabase!.from('shop_expenses').insert(newRecord);
+    } catch (e) {}
+
+    // Always mirror to system_settings for resilience
+    try {
+      const { data: cur } = await supabase!
+        .from('system_settings')
+        .select('value')
+        .eq('key', `shop_expenses_${storeId}`)
+        .maybeSingle();
+
+      const list: ShopExpense[] = cur?.value ? JSON.parse(cur.value) : [];
+      list.unshift(newRecord);
+      await supabase!.from('system_settings').upsert({
+        key: `shop_expenses_${storeId}`,
+        value: JSON.stringify(list)
+      });
+    } catch (e) {}
+
+    if (isClient()) {
+      window.dispatchEvent(new CustomEvent('zee_expenses_updated', { detail: { storeId, expense: newRecord } }));
+    }
+
+    return newRecord;
+  },
+
+  deleteExpense: async (id: string, storeId: string): Promise<void> => {
+    try {
+      await supabase!.from('shop_expenses').delete().eq('id', id);
+    } catch (e) {}
+
+    try {
+      const { data: cur } = await supabase!
+        .from('system_settings')
+        .select('value')
+        .eq('key', `shop_expenses_${storeId}`)
+        .maybeSingle();
+
+      if (cur?.value) {
+        let list: ShopExpense[] = JSON.parse(cur.value);
+        list = list.filter(e => e.id !== id);
+        await supabase!.from('system_settings').upsert({
+          key: `shop_expenses_${storeId}`,
+          value: JSON.stringify(list)
+        });
+      }
+    } catch (e) {}
+
+    if (isClient()) {
+      window.dispatchEvent(new CustomEvent('zee_expenses_updated', { detail: { storeId, deletedId: id } }));
+    }
   }
 };

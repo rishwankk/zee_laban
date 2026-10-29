@@ -194,3 +194,36 @@ INSERT INTO public.categories (id, name) VALUES
 ('cat-003', 'Sweets'),
 ('cat-004', 'Add-ons')
 ON CONFLICT (id) DO NOTHING;
+
+-- 17. Shop Expenses (Daily Expenses)
+CREATE TABLE IF NOT EXISTS public.shop_expenses (
+    id TEXT PRIMARY KEY,
+    store_id TEXT REFERENCES public.stores(id),
+    title TEXT NOT NULL,
+    category TEXT,
+    amount NUMERIC NOT NULL,
+    date TEXT NOT NULL,
+    payment_method TEXT DEFAULT 'Cash',
+    notes TEXT,
+    created_by TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+ALTER TABLE public.shop_expenses DISABLE ROW LEVEL SECURITY;
+
+-- 18. Staff Attendance (Daily Present / Absent Tracking)
+CREATE TABLE IF NOT EXISTS public.staff_attendance (
+    id TEXT PRIMARY KEY,
+    staff_id TEXT REFERENCES public.staff(id),
+    store_id TEXT REFERENCES public.stores(id),
+    date TEXT NOT NULL,
+    status TEXT NOT NULL, -- 'present' | 'absent'
+    notes TEXT,
+    marked_by TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    UNIQUE(staff_id, date)
+);
+ALTER TABLE public.staff_attendance DISABLE ROW LEVEL SECURITY;
+
+-- 19. Staff Monthly Salary
+ALTER TABLE public.staff ADD COLUMN IF NOT EXISTS monthly_salary NUMERIC DEFAULT 0;
+

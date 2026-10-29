@@ -15,6 +15,7 @@ import {
   Sparkles,
   ClipboardList,
   X,
+  Receipt,
   Settings as SettingsIcon
 } from 'lucide-react';
 
@@ -49,6 +50,7 @@ export default function Sidebar({ storeId }: SidebarProps) {
   const storeLinks = [
     { name: 'POS Counter', href: `/store/${storeId}/pos`, icon: ShoppingBag },
     { name: 'Stock Control', href: `/store/${storeId}/stock`, icon: Layers },
+    { name: 'Shop Expenses', href: `/store/${storeId}/expenses`, icon: Receipt },
     { name: 'Staff Hub', href: `/store/${storeId}/staff`, icon: Users },
     { name: 'Sales Reports', href: `/store/${storeId}/reports`, icon: BarChart3 },
     { name: 'System Settings', href: `/store/${storeId}/settings`, icon: SettingsIcon },
