@@ -30,7 +30,8 @@ import {
   TrendingUp,
   RefreshCw,
   Search,
-  ArrowRight
+  ArrowRight,
+  Trash2
 } from 'lucide-react';
 
 export default function StaffPage() {
@@ -86,6 +87,17 @@ export default function StaffPage() {
   const [advAmount, setAdvAmount] = useState('');
   const [advNotes, setAdvNotes] = useState('');
   const [advDate, setAdvDate] = useState(getTodayStr());
+
+  // Edit Advance State
+  const [editingAdvance, setEditingAdvance] = useState<(StaffAdvance & { staff?: Staff }) | null>(null);
+  const [editAdvStaffId, setEditAdvStaffId] = useState('');
+  const [editAdvAmount, setEditAdvAmount] = useState('');
+  const [editAdvNotes, setEditAdvNotes] = useState('');
+  const [editAdvDate, setEditAdvDate] = useState(getTodayStr());
+
+  // Delete Advance State
+  const [deletingAdvance, setDeletingAdvance] = useState<(StaffAdvance & { staff?: Staff }) | null>(null);
+  const [isDeletingAdv, setIsDeletingAdv] = useState(false);
 
   // Staff Details Modal & Edit States
   const [selectedStaff, setSelectedStaff] = useState<Staff | null>(null);
@@ -463,6 +475,52 @@ export default function StaffPage() {
     } catch (err) {
       console.error('Failed to record advance', err);
       alert('Failed to record advance.');
+    }
+  };
+
+  // Start editing advance
+  const handleStartEditAdvance = (adv: StaffAdvance & { staff?: Staff }) => {
+    setEditingAdvance(adv);
+    setEditAdvStaffId(adv.staff_id);
+    setEditAdvAmount(String(adv.amount));
+    setEditAdvDate(adv.date);
+    setEditAdvNotes(adv.notes || '');
+  };
+
+  // Save edited advance
+  const handleUpdateAdvance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAdvance || !editAdvStaffId || !editAdvAmount) return;
+
+    try {
+      await api.updateAdvance(editingAdvance.id, {
+        staff_id: editAdvStaffId,
+        amount: parseFloat(editAdvAmount) || 0,
+        date: editAdvDate,
+        notes: editAdvNotes.trim()
+      });
+
+      setEditingAdvance(null);
+      await loadData(true);
+    } catch (err) {
+      console.error('Failed to update advance', err);
+      alert('Failed to update advance.');
+    }
+  };
+
+  // Confirm delete advance
+  const handleDeleteAdvance = async () => {
+    if (!deletingAdvance) return;
+    setIsDeletingAdv(true);
+    try {
+      await api.deleteAdvance(deletingAdvance.id);
+      setDeletingAdvance(null);
+      await loadData(true);
+    } catch (err) {
+      console.error('Failed to delete advance', err);
+      alert('Failed to delete advance.');
+    } finally {
+      setIsDeletingAdv(false);
     }
   };
 
@@ -1077,25 +1135,44 @@ export default function StaffPage() {
               </div>
             ) : (
               <div className="overflow-x-auto scrollbar-thin">
-                <table className="w-full min-w-[600px] text-left border-collapse whitespace-nowrap">
+                <table className="w-full min-w-[650px] text-left border-collapse whitespace-nowrap">
                   <thead>
                     <tr className="border-b-2 border-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                       <th className="pb-3.5 pl-2">Employee</th>
                       <th className="pb-3.5">Date</th>
                       <th className="pb-3.5">Notes</th>
-                      <th className="pb-3.5 text-right pr-2">Advance Amount</th>
+                      <th className="pb-3.5 text-right">Advance Amount</th>
+                      <th className="pb-3.5 text-center pr-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50/80 text-xs font-semibold text-slate-700">
                     {advances.map((adv) => (
-                      <tr key={adv.id} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3.5 pl-2 font-black text-sm text-slate-800">{adv.staff.name}</td>
+                      <tr key={adv.id} className="hover:bg-slate-50/60 transition-colors group">
+                        <td className="py-3.5 pl-2 font-black text-sm text-slate-800">{adv.staff?.name || 'Staff Member'}</td>
                         <td className="py-3.5 font-mono text-[11px] text-slate-500 font-bold">{adv.date}</td>
                         <td className="py-3.5 text-slate-500 max-w-[200px] truncate" title={adv.notes}>
                           {adv.notes || 'Cash Advance'}
                         </td>
-                        <td className="py-3.5 font-mono text-right pr-2 font-black text-rose-600">
+                        <td className="py-3.5 font-mono text-right font-black text-rose-600">
                           ₹{Number(adv.amount).toFixed(2)}
+                        </td>
+                        <td className="py-3.5 text-center pr-2">
+                          <div className="flex items-center justify-center space-x-1">
+                            <button
+                              onClick={() => handleStartEditAdvance(adv)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-primary hover:bg-primary/5 transition-all cursor-pointer"
+                              title="Edit Advance"
+                            >
+                              <Edit2 className="h-3.5 w-3.5" />
+                            </button>
+                            <button
+                              onClick={() => setDeletingAdvance(adv)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-all cursor-pointer"
+                              title="Delete Advance"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -1344,6 +1421,143 @@ export default function StaffPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: EDIT ADVANCE (SALAF) ─── */}
+      {editingAdvance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-md rounded-3xl bg-white p-6 sm:p-7 shadow-2xl animate-scale-up border border-slate-100">
+            <div className="flex items-center justify-between mb-5 pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                  <Edit2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="font-display text-base font-black text-slate-800">Edit Advance Entry</h3>
+                  <p className="text-[10px] font-bold text-slate-400">Modify payout amount, date, or notes</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setEditingAdvance(null)}
+                className="rounded-xl p-2 hover:bg-slate-100 text-slate-400 transition-all cursor-pointer"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateAdvance} className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Staff Member *
+                </label>
+                <select
+                  required
+                  value={editAdvStaffId}
+                  onChange={(e) => setEditAdvStaffId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs font-bold text-slate-800 outline-none focus:border-primary cursor-pointer"
+                >
+                  {staffList.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.role}) {s.monthly_salary ? `— ₹${s.monthly_salary}/mo` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Advance Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editAdvDate}
+                    onChange={(e) => setEditAdvDate(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 font-mono text-xs font-bold text-slate-800 outline-none focus:border-primary cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                    Amount (INR) *
+                  </label>
+                  <input
+                    type="number"
+                    step="50"
+                    required
+                    placeholder="E.g., 2000"
+                    value={editAdvAmount}
+                    onChange={(e) => setEditAdvAmount(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 font-mono text-xs font-black text-slate-900 outline-none focus:border-primary"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-1.5">
+                  Notes / Reason
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Optional details..."
+                  value={editAdvNotes}
+                  onChange={(e) => setEditAdvNotes(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-xs font-semibold text-slate-800 outline-none focus:border-primary resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setEditingAdvance(null)}
+                  className="rounded-xl border border-slate-200 px-5 py-2.5 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-primary hover:bg-primary-dark px-6 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/20 transition-all active:scale-95 cursor-pointer"
+                >
+                  Update Advance
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: DELETE ADVANCE CONFIRMATION ─── */}
+      {deletingAdvance && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-scale-up border border-slate-100 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 text-rose-500 mb-4">
+              <Trash2 className="h-7 w-7" />
+            </div>
+            <h3 className="font-display text-base font-black text-slate-800">Delete Advance Entry?</h3>
+            <p className="text-xs font-semibold text-slate-400 mt-2">
+              Are you sure you want to delete this advance of{' '}
+              <strong className="text-slate-800 font-mono">₹{deletingAdvance.amount}</strong>? This will restore the employee&apos;s pending balance.
+            </p>
+
+            <div className="flex space-x-2.5 mt-6">
+              <button
+                type="button"
+                onClick={() => setDeletingAdvance(null)}
+                className="flex-1 rounded-xl border border-slate-200 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeletingAdv}
+                onClick={handleDeleteAdvance}
+                className="flex-1 rounded-xl bg-rose-600 hover:bg-rose-700 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-md shadow-rose-500/20 transition-all cursor-pointer disabled:opacity-60"
+              >
+                {isDeletingAdv ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1670,7 +1884,7 @@ export default function StaffPage() {
                           {memberAdvances.map((adv) => (
                             <div
                               key={adv.id}
-                              className="rounded-2xl border border-slate-100 p-3.5 bg-slate-50 flex items-center justify-between"
+                              className="rounded-2xl border border-slate-100 p-3.5 bg-slate-50 flex items-center justify-between group hover:bg-slate-100/60 transition-colors"
                             >
                               <div>
                                 <span className="text-xs font-black text-slate-800 block">
@@ -1678,9 +1892,27 @@ export default function StaffPage() {
                                 </span>
                                 <span className="text-[10px] font-mono font-bold text-slate-400">{adv.date}</span>
                               </div>
-                              <span className="font-mono text-sm font-black text-rose-600">
-                                ₹{Number(adv.amount).toFixed(2)}
-                              </span>
+                              <div className="flex items-center space-x-3">
+                                <span className="font-mono text-sm font-black text-rose-600">
+                                  ₹{Number(adv.amount).toFixed(2)}
+                                </span>
+                                <div className="flex items-center space-x-1 pl-2 border-l border-slate-200">
+                                  <button
+                                    onClick={() => handleStartEditAdvance(adv)}
+                                    className="p-1 rounded-lg text-slate-400 hover:text-primary hover:bg-white transition-all cursor-pointer"
+                                    title="Edit Advance"
+                                  >
+                                    <Edit2 className="h-3.5 w-3.5" />
+                                  </button>
+                                  <button
+                                    onClick={() => setDeletingAdvance(adv)}
+                                    className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-white transition-all cursor-pointer"
+                                    title="Delete Advance"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           ))}
                         </div>

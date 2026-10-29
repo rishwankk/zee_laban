@@ -725,6 +725,38 @@ export const supabaseAPI = {
     return data as StaffAdvance;
   },
 
+  updateAdvance: async (
+    id: string,
+    updates: Partial<Pick<StaffAdvance, 'staff_id' | 'amount' | 'date' | 'notes'>>
+  ): Promise<StaffAdvance> => {
+    const { data: adv } = await supabase!.from('staff_advances').select('store_id').eq('id', id).single();
+    if (!adv) throw new Error("Advance not found");
+    const isLocked = await supabaseAPI.getSalafLockState(adv.store_id);
+    if (isLocked) throw new Error("Salaf advances ledger is currently locked by the administrator.");
+
+    const { data, error } = await supabase!
+      .from('staff_advances')
+      .update(updates)
+      .eq('id', id)
+      .select(`*, staff:staff(*)`)
+      .single();
+    if (error) throw new Error(error.message);
+    return {
+      ...data,
+      staff: Array.isArray(data.staff) ? data.staff[0] : data.staff
+    } as any;
+  },
+
+  deleteAdvance: async (id: string): Promise<void> => {
+    const { data: adv } = await supabase!.from('staff_advances').select('store_id').eq('id', id).single();
+    if (!adv) throw new Error("Advance not found");
+    const isLocked = await supabaseAPI.getSalafLockState(adv.store_id);
+    if (isLocked) throw new Error("Salaf advances ledger is currently locked by the administrator.");
+
+    const { error } = await supabase!.from('staff_advances').delete().eq('id', id);
+    if (error) throw new Error(error.message);
+  },
+
   // ---------------------------------------------------------
   // SHIFT LOGS
   // ---------------------------------------------------------
