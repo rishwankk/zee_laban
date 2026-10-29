@@ -810,6 +810,39 @@ export const supabaseAPI = {
   },
 
   // ---------------------------------------------------------
+  // STOCK PASSWORD & LOCK TIME
+  // ---------------------------------------------------------
+  getStockPassword: async (storeId: string): Promise<string | null> => {
+    const { data } = await supabase!.from('system_settings').select('value').eq('key', `stock_pw_${storeId}`).maybeSingle();
+    if (data && data.value) return data.value;
+    // Fallback to staff password if already configured for store
+    const { data: staffPw } = await supabase!.from('system_settings').select('value').eq('key', `staff_pw_${storeId}`).maybeSingle();
+    return staffPw ? staffPw.value : null;
+  },
+
+  setStockPassword: async (storeId: string, newPw: string): Promise<void> => {
+    const { error } = await supabase!.from('system_settings').upsert({ key: `stock_pw_${storeId}`, value: newPw });
+    if (error) throw new Error(error.message);
+  },
+
+  getStockLockTime: async (storeId: string): Promise<number> => {
+    const { data, error } = await supabase!
+      .from('system_settings')
+      .select('value')
+      .eq('key', `stock_lock_time_${storeId}`)
+      .maybeSingle();
+    if (error || !data) return 0; // 0 means no auto-lock
+    return parseInt(data.value, 10) || 0;
+  },
+
+  setStockLockTime: async (storeId: string, minutes: number): Promise<void> => {
+    const { error } = await supabase!
+      .from('system_settings')
+      .upsert({ key: `stock_lock_time_${storeId}`, value: minutes.toString() });
+    if (error) throw new Error(error.message);
+  },
+
+  // ---------------------------------------------------------
   // BILLS & CHECKOUT
   // ---------------------------------------------------------
   getBillsByStore: async (storeId: string): Promise<(Bill & { cashierName: string })[]> => {

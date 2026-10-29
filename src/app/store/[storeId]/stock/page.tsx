@@ -19,13 +19,33 @@ import {
   Plus,
   ChevronDown,
   ChevronUp,
-  Tag
+  Tag,
+  Lock,
+  ShieldCheck,
+  X,
+  AlertCircle
 } from 'lucide-react';
 
 type StatusFilter = 'all' | 'in_stock' | 'low_stock' | 'out_of_stock';
 
 export default function StockPage() {
   const { store, user } = useAuthStore();
+
+  // Authentication & Security Lock State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isCheckingLock, setIsCheckingLock] = useState(true);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [authError, setAuthError] = useState('');
+  const [lockTimer, setLockTimer] = useState<number>(0);
+
+  // Change Password Modal State
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [pwChangeError, setPwChangeError] = useState('');
+  const [pwChangeSuccess, setPwChangeSuccess] = useState('');
+
+  // Stock Data States
   const [categoriesStock, setCategoriesStock] = useState<CategoryStock[]>([]);
   const [logs, setLogs] = useState<CategoryStockLog[]>([]);
 
@@ -55,8 +75,14 @@ export default function StockPage() {
         initialQtys[item.category] = item.quantity;
       });
       setQuantities(initialQtys);
+
+      // Load lock timer
+      const savedTimer = await api.getStockLockTime(store.id);
+      setLockTimer(savedTimer);
     } catch (err) {
       console.error("Failed to load category stock data", err);
+    } finally {
+      setIsCheckingLock(false);
     }
   };
 
@@ -78,17 +104,89 @@ export default function StockPage() {
     };
   }, [store]);
 
+  // Auto-lock idle timer logic
+  useEffect(() => {
+    if (!isAuthenticated || lockTimer === 0) return;
+
+    let timeout: NodeJS.Timeout;
+    const resetTimer = () => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        setIsAuthenticated(false);
+      }, lockTimer * 60 * 1000);
+    };
+
+    window.addEventListener('mousemove', resetTimer);
+    window.addEventListener('keypress', resetTimer);
+    window.addEventListener('click', resetTimer);
+    window.addEventListener('scroll', resetTimer, true);
+
+    resetTimer();
+
+    return () => {
+      clearTimeout(timeout);
+      window.removeEventListener('mousemove', resetTimer);
+      window.removeEventListener('keypress', resetTimer);
+      window.removeEventListener('click', resetTimer);
+      window.removeEventListener('scroll', resetTimer, true);
+    };
+  }, [isAuthenticated, lockTimer]);
+
+  // Handle Authentication Unlock
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!store) return;
+    const savedPw = await api.getStockPassword(store.id);
+    const validPw = savedPw !== null ? savedPw : '1234';
+    if (passwordInput === validPw) {
+      setIsAuthenticated(true);
+      setPasswordInput('');
+      setAuthError('');
+    } else {
+      setAuthError('Incorrect password');
+    }
+  };
+
+  // Handle Changing Master PIN
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!store) return;
+    const savedPw = await api.getStockPassword(store.id);
+    const validPw = savedPw !== null ? savedPw : '1234';
+    if (currentPw !== validPw) {
+      setPwChangeError('Current password is incorrect');
+      return;
+    }
+    if (newPw.length < 4) {
+      setPwChangeError('New PIN must be at least 4 characters');
+      return;
+    }
+    await api.setStockPassword(store.id, newPw);
+    setPwChangeSuccess('Stock PIN changed successfully!');
+    setPwChangeError('');
+    setCurrentPw('');
+    setNewPw('');
+    setTimeout(() => {
+      setShowChangePassword(false);
+      setPwChangeSuccess('');
+    }, 2000);
+  };
+
   // Handle quantity changes
   const handleQtyChange = (categoryName: string, val: string) => {
+    if (!isAuthenticated) return;
     const num = parseInt(val) || 0;
     setQuantities(prev => ({ ...prev, [categoryName]: Math.max(0, num) }));
   };
 
   // Increment / Decrement helpers
   const handleIncrement = (categoryName: string) => {
+    if (!isAuthenticated) return;
     setQuantities(prev => ({ ...prev, [categoryName]: (prev[categoryName] || 0) + 1 }));
   };
+
   const handleDecrement = (categoryName: string) => {
+    if (!isAuthenticated) return;
     setQuantities(prev => ({ ...prev, [categoryName]: Math.max(0, (prev[categoryName] || 0) - 1) }));
   };
 
@@ -96,9 +194,9 @@ export default function StockPage() {
     setExpandedCategories(prev => ({ ...prev, [categoryName]: !prev[categoryName] }));
   };
 
-  // Save stock changes
+  // Save stock changes (Protected by password)
   const handleSaveStock = async (categoryName: string, qty: number, defaultStatus?: CategoryStock['status']) => {
-    if (!store || !user) return;
+    if (!isAuthenticated || !store || !user) return;
     setIsUpdating(categoryName);
 
     try {
@@ -123,6 +221,7 @@ export default function StockPage() {
       await loadData();
     } catch (err) {
       console.error("Failed to update category stock", err);
+      alert('Could not update category stock.');
     } finally {
       setIsUpdating(null);
     }
@@ -130,6 +229,7 @@ export default function StockPage() {
 
   // Toggle between In Stock and Out of Stock
   const handleToggleStatus = async (categoryName: string, currentStatus: CategoryStock['status'], currentQty: number) => {
+    if (!isAuthenticated) return;
     let newStatus: CategoryStock['status'] = 'in_stock';
     let newQty = currentQty;
 
@@ -171,18 +271,111 @@ export default function StockPage() {
     }
   };
 
+  // ─── LOADING SCREEN ───
+  if (isCheckingLock) {
+    return (
+      <div className="flex h-full min-h-[60vh] items-center justify-center p-4">
+        <div className="flex flex-col items-center space-y-4">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
+          <p className="text-sm font-semibold text-slate-400">Verifying Stock Access...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── AUTHENTICATION GATE SCREEN ───
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-full min-h-[65vh] items-center justify-center p-4 animate-fade-in">
+        <div className="w-full max-w-sm rounded-3xl bg-white p-8 shadow-sm border border-slate-100 text-center animate-scale-up">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-6">
+            <Lock className="h-8 w-8 stroke-[2px]" />
+          </div>
+          <h2 className="font-display text-2xl font-black text-slate-800 mb-2">Stock Control Access</h2>
+          <p className="text-xs font-semibold text-slate-400 mb-8">
+            Enter the master PIN to manage and modify store inventory stock levels.
+          </p>
+
+          <form onSubmit={handleAuth} className="space-y-4">
+            <div>
+              <input
+                type="password"
+                required
+                autoFocus
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder="PIN (default: 1234)"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-5 py-4 text-center font-mono text-xl font-black tracking-widest text-slate-800 outline-none focus:border-primary focus:bg-white focus:ring-4 focus:ring-primary/5 transition-all"
+              />
+              {authError && <p className="text-xs font-bold text-red-500 mt-2 animate-shake">{authError}</p>}
+            </div>
+            <button
+              type="submit"
+              className="w-full rounded-2xl bg-primary hover:bg-primary-dark py-4 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-primary/20 transition-all active:scale-[0.98] cursor-pointer"
+            >
+              Unlock Stock Control
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── UNLOCKED STOCK HUB ───
   return (
     <div className="space-y-6 sm:space-y-8 select-none animate-fade-in">
 
-      {/* HEADER SECTION */}
-      <div>
-        <h2 className="font-display text-xl sm:text-2xl font-black text-text-primary flex items-center space-x-2">
-          <Layers className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
-          <span>Category Inventory Stock</span>
-        </h2>
-        <p className="text-[10px] sm:text-xs font-semibold text-text-muted mt-1">
-          Update available stock category-wise. All products in a category share the same stock pool during billing.
-        </p>
+      {/* HEADER SECTION WITH LOCK CONTROLS */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="font-display text-xl sm:text-2xl font-black text-text-primary flex items-center space-x-2">
+            <Layers className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+            <span>Category Inventory Stock</span>
+          </h2>
+          <p className="text-[10px] sm:text-xs font-semibold text-text-muted mt-1">
+            Protected stock control. All products in a category share the same stock pool during billing.
+          </p>
+        </div>
+
+        {/* Security Controls */}
+        <div className="flex items-center space-x-2">
+          {/* Lock Timer Selector */}
+          <div className="flex items-center space-x-1.5 bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 shadow-sm">
+            <Clock className="h-3.5 w-3.5 text-slate-400 ml-0.5" />
+            <select
+              value={lockTimer}
+              onChange={async (e) => {
+                const val = parseInt(e.target.value, 10);
+                setLockTimer(val);
+                if (store) await api.setStockLockTime(store.id, val);
+              }}
+              className="bg-transparent text-[10px] font-black uppercase tracking-wider text-slate-600 outline-none cursor-pointer pr-1"
+            >
+              <option value={0}>Never Lock</option>
+              <option value={1}>Lock 1 Min</option>
+              <option value={5}>Lock 5 Mins</option>
+              <option value={15}>Lock 15 Mins</option>
+            </select>
+          </div>
+
+          {/* Lock Immediately Button */}
+          <button
+            onClick={() => setIsAuthenticated(false)}
+            className="flex items-center space-x-1.5 rounded-xl bg-slate-800 hover:bg-slate-900 px-3.5 py-2 text-[10px] font-black uppercase tracking-wider text-white transition-all active:scale-95 cursor-pointer shadow-sm"
+          >
+            <Lock className="h-3.5 w-3.5 text-slate-300" />
+            <span>Lock Hub</span>
+          </button>
+
+          {/* Change PIN Button */}
+          <button
+            onClick={() => setShowChangePassword(true)}
+            className="rounded-xl bg-white border border-slate-200 hover:bg-slate-50 p-2 text-slate-600 transition-all active:scale-95 cursor-pointer shadow-sm"
+            title="Change Stock PIN"
+          >
+            <ShieldCheck className="h-4 w-4 text-slate-500" />
+          </button>
+        </div>
       </div>
 
       {/* METRIC CARD BAR */}
@@ -250,272 +443,281 @@ export default function StockPage() {
 
       </div>
 
-      {/* SEARCH BAR */}
-      <div className="relative">
-        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search by category name or product name..."
-          className="w-full rounded-2xl border border-slate-100 bg-white py-3 pl-11 pr-4 text-xs font-semibold outline-none shadow-sm transition-all focus:border-primary focus:ring-4 focus:ring-primary/5"
-        />
-        {searchQuery && (
-          <button
-            onClick={() => setSearchQuery('')}
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500 cursor-pointer text-[10px] font-black"
-          >
-            Clear
-          </button>
-        )}
-      </div>
+      {/* WORKSPACE & LOGS GRID */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
 
-      {/* CORE CONTENT LAYOUT */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        {/* LEFT COLUMN: STOCK MANAGEMENT LIST (2 Cols) */}
+        <div className="lg:col-span-2 space-y-4">
+          
+          {/* SEARCH BAR */}
+          <div className="relative">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search category or contained product..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full rounded-2xl border border-slate-200/80 bg-white py-3 pl-11 pr-4 text-xs font-bold text-slate-800 placeholder-slate-400 shadow-sm outline-none focus:border-primary focus:ring-4 focus:ring-primary/5 transition-all"
+            />
+          </div>
 
-        {/* LEFT COLUMN: CATEGORY STOCK CONTROLLER */}
-        <div className="xl:col-span-2 space-y-4">
-
-          <div className="rounded-3xl bg-white border border-slate-100 p-5 sm:p-6 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between mb-6 px-1">
-              <div className="flex items-center space-x-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-primary-dark text-white shadow-md shadow-primary/20">
-                  <Layers className="h-4.5 w-4.5 stroke-[2.5px]" />
-                </div>
-                <div>
-                  <h3 className="font-display text-base font-black text-slate-800">
-                    Category Stock Controller
-                  </h3>
-                  <p className="text-[9px] font-bold text-slate-400 mt-0.5">
-                    Adjust quantity once per category — automatically shared by all products in it
-                  </p>
-                </div>
+          {/* CATEGORIES CARD LIST */}
+          <div className="space-y-3">
+            {filteredCategories.length === 0 ? (
+              <div className="rounded-3xl bg-white border border-slate-100 p-12 text-center shadow-sm">
+                <Package className="h-10 w-10 text-slate-300 mx-auto mb-3" />
+                <h4 className="font-display text-sm font-black text-slate-700">No matching categories found</h4>
+                <p className="text-xs text-slate-400 font-semibold mt-1">Try refining your search terms or active filters.</p>
               </div>
-              <span className="text-[10px] font-black text-primary bg-primary/5 px-3 py-1 rounded-xl border border-primary/10">
-                {filteredCategories.length} categor{filteredCategories.length !== 1 ? 'ies' : 'y'}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {filteredCategories.map((item) => {
-                const qtyVal = quantities[item.category] ?? item.quantity;
-                const isPending = isUpdating === item.category;
-                const isDone = isSuccess === item.category;
+            ) : (
+              filteredCategories.map((item) => {
                 const badge = getStatusBadge(item.status);
-                const isExpanded = !!expandedCategories[item.category];
-
-                const fillPercent = Math.min(100, (qtyVal / 100) * 100);
-                const barColor = item.status === 'out_of_stock' ? 'bg-red-400' : item.status === 'low_stock' ? 'bg-amber-400' : 'bg-emerald-400';
+                const isExpanded = expandedCategories[item.category];
+                const currentQty = quantities[item.category] ?? item.quantity;
+                const isCurrentlyUpdating = isUpdating === item.category;
+                const isRecentlySuccess = isSuccess === item.category;
 
                 return (
                   <div
                     key={item.category}
-                    className={`group relative rounded-2xl border bg-white p-4 transition-all duration-300 hover:shadow-lg hover:shadow-slate-100/50 ${
-                      isDone ? 'border-emerald-200 bg-emerald-50/20' : 'border-slate-100 hover:border-primary/20'
-                    }`}
+                    className="rounded-2xl sm:rounded-3xl bg-white border border-slate-100 p-4 sm:p-5 shadow-sm hover:shadow-md transition-all space-y-4"
                   >
-                    {isDone && (
-                      <div className="absolute inset-0 bg-emerald-500/5 rounded-2xl pointer-events-none animate-fade-in" />
-                    )}
-
-                    {/* Top: Category Title & Status */}
-                    <div className="flex items-center space-x-3.5 mb-3.5">
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <h4 className="font-black text-[14px] text-slate-800 tracking-tight truncate group-hover:text-primary transition-colors">
-                            {item.category}
-                          </h4>
-                          <span className={`rounded-lg px-2 py-0.5 text-[8px] font-black uppercase tracking-widest border ${badge.bg}`}>
+                    {/* Top Row: Category Info & Status Toggle */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <h3 className="font-display text-base font-black text-slate-800">{item.category}</h3>
+                          <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${badge.bg}`}>
                             {badge.label}
                           </span>
                         </div>
-                        <div className="flex items-center space-x-2 mt-1">
-                          <span className="rounded-lg bg-blue-50 text-primary text-[9px] font-black tracking-wider px-2 py-0.5 flex items-center space-x-1">
-                            <Tag className="h-3 w-3 inline" />
-                            <span>{item.product_count} product{item.product_count !== 1 ? 's' : ''} under category</span>
-                          </span>
-                        </div>
+                        <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                          Controls pool of {item.product_count} linked items
+                        </p>
+                      </div>
+
+                      {/* Quick Status Pill Toggle */}
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={() => handleToggleStatus(item.category, item.status, currentQty)}
+                          className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer border ${
+                            item.status === 'out_of_stock'
+                              ? 'bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100'
+                              : 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100'
+                          }`}
+                        >
+                          {item.status === 'out_of_stock' ? 'Mark Available' : 'Mark Out of Stock'}
+                        </button>
+
+                        <button
+                          onClick={() => toggleExpand(item.category)}
+                          className="p-1.5 rounded-xl border border-slate-200 hover:bg-slate-50 text-slate-500 transition-all cursor-pointer"
+                          title="View Category Items"
+                        >
+                          {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                        </button>
                       </div>
                     </div>
 
-                    {/* Stock Level Visual Bar */}
-                    <div className="mb-3.5">
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Available Pool</span>
-                        <span className="font-mono text-xs font-black text-slate-700">{qtyVal} <span className="text-[9px] font-semibold text-slate-400">units</span></span>
-                      </div>
-                      <div className="h-2 w-full rounded-full bg-slate-100 overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-500 ${barColor}`}
-                          style={{ width: `${fillPercent}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Controls Row */}
-                    <div className="flex items-center justify-between pt-3 border-t border-slate-50">
-                      {/* Quantity Stepper */}
-                      <div className="flex items-center space-x-1.5 bg-slate-50/80 p-1 rounded-xl border border-slate-100">
+                    {/* Quantity Stepper & Save Row */}
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-50">
+                      <div className="flex items-center space-x-2 w-full sm:w-auto">
                         <button
                           onClick={() => handleDecrement(item.category)}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg bg-white hover:bg-primary hover:text-white transition-all active:scale-90 shadow-sm cursor-pointer text-slate-500 border border-slate-100"
+                          className="h-10 w-10 rounded-xl border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 active:scale-95 transition-all cursor-pointer shrink-0"
                         >
-                          <Minus className="h-3 w-3 stroke-[2.5px]" />
+                          <Minus className="h-4 w-4" />
                         </button>
-                        <input
-                          type="number"
-                          value={qtyVal}
-                          onChange={(e) => handleQtyChange(item.category, e.target.value)}
-                          className="w-14 text-center rounded-lg border border-slate-200 bg-white py-1 font-mono text-xs font-black text-slate-800 focus:border-primary focus:ring-2 focus:ring-primary/10 outline-none"
-                        />
+
+                        <div className="relative flex-1 sm:w-28">
+                          <input
+                            type="number"
+                            min="0"
+                            value={currentQty}
+                            onChange={(e) => handleQtyChange(item.category, e.target.value)}
+                            className="w-full text-center font-mono text-base font-black text-slate-800 rounded-xl border border-slate-200 py-2 outline-none focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all"
+                          />
+                        </div>
+
                         <button
                           onClick={() => handleIncrement(item.category)}
-                          className="flex h-7 w-7 items-center justify-center rounded-lg bg-white hover:bg-primary hover:text-white transition-all active:scale-90 shadow-sm cursor-pointer text-slate-500 border border-slate-100"
+                          className="h-10 w-10 rounded-xl border border-slate-200 hover:bg-slate-50 flex items-center justify-center text-slate-600 active:scale-95 transition-all cursor-pointer shrink-0"
                         >
-                          <Plus className="h-3 w-3 stroke-[2.5px]" />
-                        </button>
-                        <button
-                          onClick={() => handleSaveStock(item.category, qtyVal)}
-                          disabled={isPending || item.quantity === qtyVal}
-                          className={`rounded-lg p-1.5 transition-all active:scale-95 cursor-pointer shadow-sm ${
-                            isDone
-                              ? 'bg-success text-white'
-                              : 'bg-white border border-slate-200 text-primary hover:bg-primary hover:text-white hover:border-transparent'
-                          } disabled:opacity-30 disabled:cursor-not-allowed`}
-                        >
-                          {isDone ? <CheckCircle className="h-4 w-4" /> : <Save className="h-4 w-4 stroke-[2.5px]" />}
+                          <Plus className="h-4 w-4" />
                         </button>
                       </div>
 
-                      {/* Toggle Quick Action Button */}
+                      {/* Save Button */}
                       <button
-                        onClick={() => handleToggleStatus(item.category, item.status, item.quantity)}
-                        className={`rounded-xl px-3.5 py-2 text-[9px] font-black uppercase tracking-widest transition-all active:scale-[0.96] cursor-pointer shadow-sm ${
-                          item.status === 'out_of_stock'
-                            ? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-emerald-500/15 hover:shadow-emerald-500/25'
-                            : 'bg-white border border-red-100 text-red-500 hover:bg-red-50 hover:border-red-200 hover:text-red-600'
+                        onClick={() => handleSaveStock(item.category, currentQty)}
+                        disabled={isCurrentlyUpdating}
+                        className={`w-full sm:w-auto px-6 py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center space-x-2 transition-all cursor-pointer active:scale-95 shadow-sm ${
+                          isRecentlySuccess
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-primary hover:bg-primary-dark text-white shadow-primary/20'
                         }`}
                       >
-                        {item.status === 'out_of_stock' ? '✓ Restock' : '✕ Mark Empty'}
+                        {isRecentlySuccess ? (
+                          <>
+                            <CheckCircle className="h-4 w-4" />
+                            <span>Updated!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4" />
+                            <span>{isCurrentlyUpdating ? 'Saving...' : 'Update Stock'}</span>
+                          </>
+                        )}
                       </button>
                     </div>
 
-                    {/* Expandable Included Products Accordion */}
-                    {item.products && item.products.length > 0 && (
-                      <div className="mt-3 pt-2.5 border-t border-slate-50/80">
-                        <button
-                          onClick={() => toggleExpand(item.category)}
-                          className="w-full flex items-center justify-between text-[10px] font-black text-slate-500 hover:text-primary transition-colors py-1 cursor-pointer"
-                        >
-                          <span>{isExpanded ? 'Hide products' : `View ${item.products.length} product${item.products.length !== 1 ? 's' : ''} in this category`}</span>
-                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                        </button>
-
-                        {isExpanded && (
-                          <div className="mt-2 space-y-1.5 max-h-36 overflow-y-auto pr-1 scrollbar-thin">
-                            {item.products.map(prod => (
-                              <div
-                                key={prod.id}
-                                className="flex items-center justify-between rounded-xl bg-slate-50/70 px-2.5 py-1.5 text-[11px]"
-                              >
-                                <span className="font-bold text-slate-700 truncate">{prod.name}</span>
-                                <span className="font-mono font-black text-slate-500 text-[10px] shrink-0 ml-2">₹{prod.price}</span>
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                    {/* Expandable Product List */}
+                    {isExpanded && item.products && (
+                      <div className="pt-3 border-t border-slate-100 space-y-2">
+                        <span className="text-[9px] font-black uppercase tracking-wider text-slate-400 block">
+                          Included Products in this Category:
+                        </span>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {item.products.map(prod => (
+                            <div
+                              key={prod.id}
+                              className="rounded-xl border border-slate-100 bg-slate-50/50 p-2.5 flex items-center justify-between text-xs"
+                            >
+                              <span className="font-bold text-slate-700 truncate pr-2">{prod.name}</span>
+                              <span className="font-mono font-black text-slate-900 shrink-0">₹{prod.price}</span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
+
                   </div>
                 );
-              })}
-            </div>
-
-            {filteredCategories.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-50 mb-4 border border-slate-100">
-                  <Package className="h-8 w-8 text-slate-200" />
-                </div>
-                <p className="text-sm font-black text-slate-400">No categories match your search</p>
-                <p className="text-[10px] text-slate-400 mt-1">Try adjusting the search or status filter above.</p>
-              </div>
+              })
             )}
           </div>
+
         </div>
 
-        {/* RIGHT COLUMN: CATEGORY AUDIT LOG HISTORY */}
-        <div className="rounded-3xl bg-white border border-slate-100 p-4 sm:p-6 shadow-sm flex flex-col max-h-[550px] overflow-hidden">
-
-          <div className="flex items-center space-x-2.5 mb-5">
+        {/* RIGHT COLUMN: RECENT STOCK LOGS (1 Col) */}
+        <div className="rounded-3xl bg-white border border-slate-100 p-5 sm:p-6 shadow-sm flex flex-col max-h-[750px]">
+          <div className="flex items-center space-x-2 mb-4 pb-3 border-b border-slate-100">
             <History className="h-5 w-5 text-primary" />
             <div>
-              <h3 className="font-display text-sm font-black text-text-primary">
-                Category Stock Logs
-              </h3>
-              <p className="text-[9px] font-bold text-slate-400">Audit trail of category adjustments</p>
+              <h3 className="font-display text-sm font-black text-slate-800">Stock Update Log</h3>
+              <p className="text-[10px] font-semibold text-slate-400">History of stock changes made in this outlet</p>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-3 pr-1 scrollbar-thin">
             {logs.length === 0 ? (
-              <div className="flex h-48 flex-col items-center justify-center text-center p-4">
-                <Clock className="h-8 w-8 text-gray-200 mb-2" />
-                <span className="text-xs font-semibold text-text-muted">No category logs yet.</span>
-                <span className="text-[10px] text-text-muted/70 mt-1">Updates to category quantities appear here.</span>
-              </div>
+              <p className="text-xs text-slate-400 text-center py-12 italic">No stock update logs recorded yet.</p>
             ) : (
               logs.map((log) => (
                 <div
                   key={log.id}
-                  className="rounded-2xl border border-slate-100 bg-slate-50/40 p-3 sm:p-3.5 space-y-2 hover:border-blue-100 transition-colors"
+                  className="rounded-2xl border border-slate-100 bg-slate-50/60 p-3.5 space-y-2 hover:bg-slate-50 transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <span className="font-black text-xs text-text-primary line-clamp-1">
-                      {log.category}
-                    </span>
-                    <span className="text-[8px] font-bold text-text-muted whitespace-nowrap bg-white px-2 py-0.5 rounded border border-gray-100 shrink-0">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-xs text-slate-800">{log.category}</span>
+                    <span className="font-mono text-[9px] font-bold text-slate-400">
                       {new Date(log.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>
 
-                  <div className="flex items-center justify-between text-[10px] font-bold">
-                    <div className="flex items-center space-x-1.5 text-text-muted">
-                      <User className="h-3 w-3 text-primary" />
-                      <span>{log.updated_by}</span>
-                    </div>
-
-                    <div className="font-mono text-primary flex items-center space-x-1.5">
-                      <span className="line-through text-text-muted/60">
-                        {log.old_quantity ?? '0'}
-                      </span>
+                  <div className="flex items-center justify-between text-[11px] font-mono">
+                    <span className="text-slate-500 font-bold">Qty Change:</span>
+                    <div className="flex items-center space-x-1 font-bold text-slate-700">
+                      <span>{log.old_quantity ?? '—'}</span>
                       <span>→</span>
-                      <span className="font-black">
-                        {log.new_quantity}
-                      </span>
+                      <span className="font-black text-primary-dark">{log.new_quantity}</span>
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between pt-1 border-t border-dashed border-gray-200/60">
-                    <span className="text-[9px] font-black text-text-muted uppercase">Status</span>
-                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase ${
+                  <div className="flex items-center justify-between pt-1 border-t border-dashed border-slate-200">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase">Status</span>
+                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${
                       log.new_status === 'in_stock'
-                        ? 'bg-emerald-100 text-emerald-800'
-                        : 'bg-red-100 text-red-800'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                        : 'bg-red-50 text-red-700 border border-red-100'
                     }`}>
                       {log.new_status.replace('_', ' ')}
                     </span>
                   </div>
-
                 </div>
               ))
             )}
           </div>
-
         </div>
 
       </div>
 
+      {/* ─── MODAL: CHANGE PIN ─── */}
+      {showChangePassword && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-sm rounded-3xl bg-white p-6 shadow-2xl animate-scale-up border border-slate-100">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-sm font-black text-slate-800 uppercase tracking-wide flex items-center space-x-2">
+                <ShieldCheck className="h-4.5 w-4.5 text-primary" />
+                <span>Change Stock PIN</span>
+              </h3>
+              <button
+                onClick={() => setShowChangePassword(false)}
+                className="rounded-lg p-1.5 hover:bg-slate-100 text-slate-400 transition-all cursor-pointer"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {pwChangeError && (
+              <div className="rounded-xl bg-red-50 text-red-600 p-3 mb-4 text-xs font-bold border border-red-100 flex items-center space-x-2">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{pwChangeError}</span>
+              </div>
+            )}
+            {pwChangeSuccess && (
+              <div className="rounded-xl bg-emerald-50 text-emerald-700 p-3 mb-4 text-xs font-bold border border-emerald-100 flex items-center space-x-2">
+                <CheckCircle className="h-4 w-4 shrink-0" />
+                <span>{pwChangeSuccess}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              <div>
+                <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                  Current PIN
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={currentPw}
+                  onChange={(e) => setCurrentPw(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-xs outline-none focus:border-primary font-mono font-bold text-slate-800"
+                />
+              </div>
+              <div>
+                <label className="block text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1.5">
+                  New PIN (Min 4 chars)
+                </label>
+                <input
+                  type="password"
+                  required
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-3 text-xs outline-none focus:border-primary font-mono font-bold text-slate-800"
+                />
+              </div>
+              <button
+                type="submit"
+                className="w-full rounded-xl bg-primary hover:bg-primary-dark py-3.5 text-xs font-black uppercase tracking-widest text-white shadow-lg shadow-primary/20 transition-all active:scale-[0.98] mt-2 cursor-pointer"
+              >
+                Update PIN
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
-
