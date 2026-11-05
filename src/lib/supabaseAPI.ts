@@ -1626,6 +1626,45 @@ export const supabaseAPI = {
   // ---------------------------------------------------------
   // SHOP EXPENSES (DAILY EXPENSES)
   // ---------------------------------------------------------
+  getAllExpenses: async (date?: string, startDate?: string, endDate?: string): Promise<ShopExpense[]> => {
+    try {
+      let query = supabase!
+        .from('shop_expenses')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (date) {
+        query = query.eq('date', date);
+      } else if (startDate && endDate) {
+        query = query.gte('date', startDate).lte('date', endDate);
+      }
+
+      const { data, error } = await query;
+      if (!error && data && data.length > 0) {
+        return data as ShopExpense[];
+      }
+    } catch (e) {}
+
+    // Resilient fallback: aggregate from all stores
+    try {
+      const stores = await supabaseAPI.getStores();
+      const all: ShopExpense[] = [];
+      for (const st of stores) {
+        const list = await supabaseAPI.getExpensesByStore(st.id);
+        all.push(...list);
+      }
+      let filtered = all;
+      if (date) {
+        filtered = filtered.filter(e => e.date === date);
+      } else if (startDate && endDate) {
+        filtered = filtered.filter(e => e.date >= startDate && e.date <= endDate);
+      }
+      return filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    } catch (e) {}
+
+    return [];
+  },
+
   getExpensesByStore: async (storeId: string, date?: string): Promise<ShopExpense[]> => {
     try {
       let query = supabase!
@@ -1728,6 +1767,37 @@ export const supabaseAPI = {
 
     if (isClient()) {
       window.dispatchEvent(new CustomEvent('zee_expenses_updated', { detail: { storeId, deletedId: id } }));
+    }
+  },
+
+  updateExpense: async (
+    id: string,
+    storeId: string,
+    updates: Partial<Omit<ShopExpense, 'id' | 'created_at'>>
+  ): Promise<void> => {
+    try {
+      await supabase!.from('shop_expenses').update(updates).eq('id', id);
+    } catch (e) {}
+
+    try {
+      const { data: cur } = await supabase!
+        .from('system_settings')
+        .select('value')
+        .eq('key', `shop_expenses_${storeId}`)
+        .maybeSingle();
+
+      if (cur?.value) {
+        let list: ShopExpense[] = JSON.parse(cur.value);
+        list = list.map(e => (e.id === id ? { ...e, ...updates } : e));
+        await supabase!.from('system_settings').upsert({
+          key: `shop_expenses_${storeId}`,
+          value: JSON.stringify(list)
+        });
+      }
+    } catch (e) {}
+
+    if (isClient()) {
+      window.dispatchEvent(new CustomEvent('zee_expenses_updated', { detail: { storeId, updatedId: id } }));
     }
   }
 };

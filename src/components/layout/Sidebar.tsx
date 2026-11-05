@@ -41,6 +41,7 @@ export default function Sidebar({ storeId }: SidebarProps) {
   const adminLinks = [
     { name: 'Dashboard', href: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Store Outlets', href: '/admin/stores', icon: Store },
+    { name: 'Shop Expenses', href: '/admin/expenses', icon: Receipt },
     { name: 'Master Menu', href: '/admin/menu', icon: MenuIcon },
     { name: 'Inventory & Supplies', href: '/admin/inventory', icon: ClipboardList },
     { name: 'Global Reports', href: '/admin/reports', icon: BarChart3 },

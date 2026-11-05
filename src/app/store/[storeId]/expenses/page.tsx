@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { api, Bill, ShopExpense } from '@/lib/supabase';
 import { useAuthStore } from '@/store/useAuthStore';
 import {
@@ -12,21 +14,17 @@ import {
   TrendingUp,
   TrendingDown,
   Coins,
-  Wallet,
   Trash2,
   X,
   CreditCard,
   Smartphone,
   Banknote,
   Search,
-  Filter,
-  CheckCircle2,
-  AlertCircle,
-  ShoppingBag,
-  Sparkles,
   ArrowUpRight,
   ArrowDownRight,
-  RefreshCw
+  RefreshCw,
+  Store as StoreIcon,
+  CheckCircle2
 } from 'lucide-react';
 
 const EXPENSE_CATEGORIES = [
@@ -43,10 +41,17 @@ const EXPENSE_CATEGORIES = [
 
 export default function ShopExpensesPage() {
   const { store, user } = useAuthStore();
+  const params = useParams();
+  const storeId = (params?.storeId as string) || store?.id;
 
   // Selected date defaults to today in YYYY-MM-DD
   const getTodayStr = () => new Date().toISOString().substring(0, 10);
   const [selectedDate, setSelectedDate] = useState<string>(getTodayStr());
+  const yesterdayStr = useMemo(() => {
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    return y.toISOString().substring(0, 10);
+  }, []);
 
   // Active view: 'daily' or 'all_month'
   const [activeView, setActiveView] = useState<'daily' | 'month'>('daily');
@@ -74,34 +79,59 @@ export default function ShopExpensesPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Load store data
-  const loadData = async (silent = false) => {
-    if (!store) return;
+  const loadData = useCallback(async (silent = false) => {
+    const targetStoreId = storeId || store?.id;
+    if (!targetStoreId) return;
     if (!silent) setLoading(true);
     try {
       // 1. Fetch bills to calculate revenue
-      const bList = await api.getBillsByStore(store.id);
+      const bList = await api.getBillsByStore(targetStoreId);
       setBills(bList);
 
       // 2. Fetch expenses
-      const eList = await api.getExpensesByStore(store.id);
+      const eList = await api.getExpensesByStore(targetStoreId);
       setExpenses(eList);
     } catch (err) {
       console.error('Failed to load expenses or bills:', err);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
-  };
+  }, [storeId, store]);
 
+  // Initial mount load
   useEffect(() => {
-    loadData();
-  }, [store]);
+    let ignore = false;
+    const fetchInitial = async () => {
+      const targetStoreId = storeId || store?.id;
+      if (!targetStoreId) return;
+      try {
+        const bList = await api.getBillsByStore(targetStoreId);
+        if (ignore) return;
+        setBills(bList);
+
+        const eList = await api.getExpensesByStore(targetStoreId);
+        if (ignore) return;
+        setExpenses(eList);
+      } catch (err) {
+        console.error('Failed to load initial expenses or bills:', err);
+      } finally {
+        if (!ignore) setLoading(false);
+      }
+    };
+
+    fetchInitial();
+
+    return () => {
+      ignore = true;
+    };
+  }, [storeId, store]);
 
   // Real-time synchronization event listener
   useEffect(() => {
     const handleSync = () => loadData(true);
     window.addEventListener('zee_expenses_updated', handleSync);
     return () => window.removeEventListener('zee_expenses_updated', handleSync);
-  }, [store]);
+  }, [loadData]);
 
   // Format date helper
   const formatDateDisplay = (dateStr: string) => {
@@ -169,9 +199,6 @@ export default function ShopExpensesPage() {
     return dailyExpenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   }, [dailyExpenses]);
 
-  // Daily net balance (Revenue - Expense)
-  const netDailyBalance = dailyRevenue - totalDailyExpense;
-
   // Monthly stats (current month of selectedDate)
   const currentMonthPrefix = selectedDate.substring(0, 7); // "YYYY-MM"
   const monthlyBills = useMemo(() => {
@@ -224,11 +251,12 @@ export default function ShopExpensesPage() {
   // Handle Add Expense
   const handleAddExpense = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!store || !expTitle.trim() || !expAmount) return;
+    const targetStoreId = storeId || store?.id;
+    if (!targetStoreId || !expTitle.trim() || !expAmount) return;
 
     setIsSubmitting(true);
     try {
-      await api.addExpense(store.id, {
+      await api.addExpense(targetStoreId, {
         title: expTitle.trim(),
         category: expCategory,
         amount: parseFloat(expAmount) || 0,
@@ -255,9 +283,10 @@ export default function ShopExpensesPage() {
 
   // Handle Delete Expense
   const handleDeleteExpense = async (id: string) => {
-    if (!store) return;
+    const targetStoreId = storeId || store?.id;
+    if (!targetStoreId) return;
     try {
-      await api.deleteExpense(id, store.id);
+      await api.deleteExpense(id, targetStoreId);
       setDeletingId(null);
       await loadData(true);
     } catch (err) {
@@ -276,9 +305,16 @@ export default function ShopExpensesPage() {
               <Receipt className="h-5 w-5" />
             </div>
             <div>
-              <h1 className="font-display text-xl sm:text-2xl font-black text-text-primary tracking-tight">
-                Daily Shop Expenses
-              </h1>
+              <div className="flex items-center space-x-2">
+                <h1 className="font-display text-xl sm:text-2xl font-black text-text-primary tracking-tight">
+                  Daily Shop Expenses
+                </h1>
+                {user?.role === 'admin' && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary uppercase">
+                    Admin View
+                  </span>
+                )}
+              </div>
               <p className="text-xs font-semibold text-text-muted mt-0.5">
                 Monitor day-to-day store expenses, compare with daily revenue, and track profit cash flow.
               </p>
@@ -286,14 +322,24 @@ export default function ShopExpensesPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          {user?.role === 'admin' && (
+            <Link
+              href="/admin/expenses"
+              className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 px-3.5 py-2.5 text-xs font-bold text-white transition-all shadow-sm cursor-pointer whitespace-nowrap"
+            >
+              <StoreIcon className="h-4 w-4 text-primary-light" />
+              <span>All Shops (Admin View)</span>
+            </Link>
+          )}
+
           <button
             onClick={() => loadData(false)}
-            className="flex items-center space-x-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3.5 py-2.5 text-xs font-bold text-slate-600 transition-all active:scale-95 shadow-sm cursor-pointer"
+            className="flex-1 sm:flex-initial flex items-center justify-center space-x-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 px-3.5 py-2.5 text-xs font-bold text-slate-600 transition-all active:scale-95 shadow-sm cursor-pointer"
             title="Refresh Data"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-primary' : 'text-slate-400'}`} />
-            <span className="hidden sm:inline">Refresh</span>
+            <span>Refresh</span>
           </button>
 
           <button
@@ -301,7 +347,7 @@ export default function ShopExpensesPage() {
               setExpDate(selectedDate);
               setShowAddModal(true);
             }}
-            className="flex items-center space-x-2 rounded-xl bg-primary hover:bg-primary-dark px-4 sm:px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/20 transition-all active:scale-95 cursor-pointer"
+            className="w-full sm:w-auto flex items-center justify-center space-x-2 rounded-xl bg-primary hover:bg-primary-dark px-4 sm:px-5 py-2.5 text-xs font-black uppercase tracking-wider text-white shadow-lg shadow-primary/20 transition-all active:scale-95 cursor-pointer"
           >
             <Plus className="h-4 w-4 stroke-[3px]" />
             <span>Add Expense</span>
@@ -310,10 +356,10 @@ export default function ShopExpensesPage() {
       </div>
 
       {/* ─── DATE CONTROLS BAR ─── */}
-      <div className="rounded-3xl bg-white border border-slate-100 p-4 sm:p-5 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+      <div className="rounded-3xl bg-white border border-slate-100 p-4 sm:p-5 shadow-sm flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
         {/* Date Selector Navigation */}
-        <div className="flex items-center space-x-2 w-full md:w-auto justify-between md:justify-start">
-          <div className="flex items-center space-x-1 bg-slate-50 border border-slate-200/80 rounded-2xl p-1">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full md:w-auto">
+          <div className="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-2xl p-1">
             <button
               onClick={() => stepDate(-1)}
               className="p-2 rounded-xl hover:bg-white text-slate-600 hover:text-slate-900 transition-all cursor-pointer active:scale-90"
@@ -322,7 +368,7 @@ export default function ShopExpensesPage() {
               <ChevronLeft className="h-4 w-4" />
             </button>
 
-            <div className="relative flex items-center px-2">
+            <div className="relative flex items-center px-2 flex-1 justify-center">
               <Calendar className="h-4 w-4 text-primary mr-2 shrink-0 pointer-events-none" />
               <input
                 type="date"
@@ -349,10 +395,10 @@ export default function ShopExpensesPage() {
           </div>
 
           {/* Quick Date Pills */}
-          <div className="flex items-center space-x-1.5">
+          <div className="flex items-center space-x-1.5 justify-center sm:justify-start">
             <button
               onClick={() => setSelectedDate(getTodayStr())}
-              className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+              className={`flex-1 sm:flex-initial px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer text-center ${
                 isToday
                   ? 'bg-primary text-white shadow-md shadow-primary/20'
                   : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
@@ -366,9 +412,8 @@ export default function ShopExpensesPage() {
                 y.setDate(y.getDate() - 1);
                 setSelectedDate(y.toISOString().substring(0, 10));
               }}
-              className={`px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
-                selectedDate ===
-                new Date(Date.now() - 86400000).toISOString().substring(0, 10)
+              className={`flex-1 sm:flex-initial px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer text-center ${
+                selectedDate === yesterdayStr
                   ? 'bg-primary text-white shadow-md shadow-primary/20'
                   : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200/60'
               }`}
@@ -382,7 +427,7 @@ export default function ShopExpensesPage() {
         <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-2xl w-full md:w-auto justify-center">
           <button
             onClick={() => setActiveView('daily')}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            className={`flex-1 md:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer text-center ${
               activeView === 'daily'
                 ? 'bg-white text-primary shadow-sm'
                 : 'text-slate-500 hover:text-slate-900'
@@ -392,7 +437,7 @@ export default function ShopExpensesPage() {
           </button>
           <button
             onClick={() => setActiveView('month')}
-            className={`px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer ${
+            className={`flex-1 md:flex-initial px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wider transition-all cursor-pointer text-center ${
               activeView === 'month'
                 ? 'bg-white text-primary shadow-sm'
                 : 'text-slate-500 hover:text-slate-900'
@@ -542,7 +587,7 @@ export default function ShopExpensesPage() {
             </div>
 
             {/* Search & Category Filter */}
-            <div className="flex items-center space-x-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
               <div className="relative flex-1 sm:w-48">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
                 <input
@@ -557,7 +602,7 @@ export default function ShopExpensesPage() {
               <select
                 value={selectedCategoryFilter}
                 onChange={(e) => setSelectedCategoryFilter(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-primary cursor-pointer"
+                className="w-full sm:w-auto rounded-xl border border-slate-200 bg-slate-50/50 px-3 py-2 text-xs font-bold text-slate-700 outline-none focus:border-primary cursor-pointer"
               >
                 <option value="all">All Categories</option>
                 {EXPENSE_CATEGORIES.map(c => (
@@ -591,77 +636,129 @@ export default function ShopExpensesPage() {
               </button>
             </div>
           ) : (
-            <div className="overflow-x-auto scrollbar-thin">
-              <table className="w-full min-w-[600px] text-left border-collapse whitespace-nowrap">
-                <thead>
-                  <tr className="border-b-2 border-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    <th className="pb-3.5 pl-2">Item / Description</th>
-                    <th className="pb-3.5">Category</th>
-                    <th className="pb-3.5">Date</th>
-                    <th className="pb-3.5 text-center">Payment</th>
-                    <th className="pb-3.5 text-right">Amount</th>
-                    <th className="pb-3.5 text-center pr-2">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50/80 text-xs font-semibold text-slate-700">
-                  {displayedExpenses.map((exp) => (
-                    <tr key={exp.id} className="hover:bg-slate-50/60 transition-colors group">
-                      <td className="py-3.5 pl-2">
-                        <div className="max-w-[220px]">
-                          <span className="block font-black text-sm text-slate-800 truncate" title={exp.title}>
-                            {exp.title}
+            <>
+              {/* Mobile Card List (< sm screens) */}
+              <div className="sm:hidden space-y-3">
+                {displayedExpenses.map((exp) => (
+                  <div
+                    key={exp.id}
+                    className="p-3.5 rounded-2xl border border-slate-100 bg-slate-50/50 space-y-2.5 hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <span className="block font-black text-sm text-slate-800 break-words" title={exp.title}>
+                          {exp.title}
+                        </span>
+                        {exp.notes && (
+                          <span className="text-[11px] text-slate-400 block mt-0.5" title={exp.notes}>
+                            {exp.notes}
                           </span>
-                          {exp.notes && (
-                            <span className="text-[10px] text-slate-400 truncate block font-normal" title={exp.notes}>
-                              {exp.notes}
-                            </span>
-                          )}
-                        </div>
-                      </td>
+                        )}
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className="font-mono text-sm font-black text-rose-600 block">
+                          ₹{Number(exp.amount).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
 
-                      <td className="py-3.5">
-                        <span className="rounded-lg bg-slate-100 text-slate-600 px-2.5 py-1 text-[10px] font-bold">
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/60 text-[10px] font-bold text-slate-500">
+                      <div className="flex items-center space-x-1.5 flex-wrap gap-y-1">
+                        <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
                           {exp.category}
                         </span>
-                      </td>
-
-                      <td className="py-3.5 font-mono text-[11px] text-slate-500 font-bold">
-                        {exp.date}
-                      </td>
-
-                      <td className="py-3.5 text-center">
-                        <span className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
-                          exp.payment_method === 'Cash'
-                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
-                            : exp.payment_method === 'UPI'
-                            ? 'bg-blue-50 text-blue-700 border border-blue-100'
-                            : 'bg-purple-50 text-purple-700 border border-purple-100'
-                        }`}>
-                          {exp.payment_method === 'Cash' && <Banknote className="h-3 w-3" />}
-                          {exp.payment_method === 'UPI' && <Smartphone className="h-3 w-3" />}
-                          {exp.payment_method === 'Card' && <CreditCard className="h-3 w-3" />}
-                          <span>{exp.payment_method}</span>
+                        <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-600 font-mono">
+                          {exp.date}
                         </span>
-                      </td>
+                        <span className="px-2 py-0.5 rounded-md bg-white border border-slate-200 text-slate-700">
+                          {exp.payment_method}
+                        </span>
+                      </div>
+                      <button
+                        onClick={() => setDeletingId(exp.id)}
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition-all cursor-pointer shrink-0 ml-2"
+                        title="Delete Expense"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
 
-                      <td className="py-3.5 text-right font-mono text-sm font-black text-rose-600">
-                        ₹{Number(exp.amount).toFixed(2)}
-                      </td>
-
-                      <td className="py-3.5 text-center pr-2">
-                        <button
-                          onClick={() => setDeletingId(exp.id)}
-                          className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all cursor-pointer opacity-80 group-hover:opacity-100"
-                          title="Delete Expense"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
+              {/* Desktop / Tablet Table (>= sm screens) */}
+              <div className="hidden sm:block overflow-x-auto scrollbar-thin">
+                <table className="w-full text-left border-collapse whitespace-nowrap">
+                  <thead>
+                    <tr className="border-b-2 border-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                      <th className="pb-3.5 pl-2">Item / Description</th>
+                      <th className="pb-3.5">Category</th>
+                      <th className="pb-3.5">Date</th>
+                      <th className="pb-3.5 text-center">Payment</th>
+                      <th className="pb-3.5 text-right">Amount</th>
+                      <th className="pb-3.5 text-center pr-2">Action</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50/80 text-xs font-semibold text-slate-700">
+                    {displayedExpenses.map((exp) => (
+                      <tr key={exp.id} className="hover:bg-slate-50/60 transition-colors group">
+                        <td className="py-3.5 pl-2">
+                          <div className="max-w-[220px]">
+                            <span className="block font-black text-sm text-slate-800 truncate" title={exp.title}>
+                              {exp.title}
+                            </span>
+                            {exp.notes && (
+                              <span className="text-[10px] text-slate-400 truncate block font-normal" title={exp.notes}>
+                                {exp.notes}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        <td className="py-3.5">
+                          <span className="rounded-lg bg-slate-100 text-slate-600 px-2.5 py-1 text-[10px] font-bold">
+                            {exp.category}
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 font-mono text-[11px] text-slate-500 font-bold">
+                          {exp.date}
+                        </td>
+
+                        <td className="py-3.5 text-center">
+                          <span className={`inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider ${
+                            exp.payment_method === 'Cash'
+                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                              : exp.payment_method === 'UPI'
+                              ? 'bg-blue-50 text-blue-700 border border-blue-100'
+                              : 'bg-purple-50 text-purple-700 border border-purple-100'
+                          }`}>
+                            {exp.payment_method === 'Cash' && <Banknote className="h-3 w-3" />}
+                            {exp.payment_method === 'UPI' && <Smartphone className="h-3 w-3" />}
+                            {exp.payment_method === 'Card' && <CreditCard className="h-3 w-3" />}
+                            <span>{exp.payment_method}</span>
+                          </span>
+                        </td>
+
+                        <td className="py-3.5 text-right font-mono text-sm font-black text-rose-600">
+                          ₹{Number(exp.amount).toFixed(2)}
+                        </td>
+
+                        <td className="py-3.5 text-center pr-2">
+                          <button
+                            onClick={() => setDeletingId(exp.id)}
+                            className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all cursor-pointer opacity-80 group-hover:opacity-100"
+                            title="Delete Expense"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
 
@@ -804,7 +901,7 @@ export default function ShopExpensesPage() {
                   </label>
                   <select
                     value={expPaymentMethod}
-                    onChange={(e) => setExpPaymentMethod(e.target.value as any)}
+                    onChange={(e) => setExpPaymentMethod(e.target.value as 'Cash' | 'UPI' | 'Card' | 'Other')}
                     className="w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-xs font-bold text-slate-800 outline-none focus:border-primary cursor-pointer"
                   >
                     <option value="Cash">Cash Counter</option>
